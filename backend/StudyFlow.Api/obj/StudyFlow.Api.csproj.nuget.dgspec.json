@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\1 - Hard Disk\\6 - Sistema\\3 - Documentos\\GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj": {}
+    "C:\\1 - Notebook Things\\3 - GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj": {}
   },
   "projects": {
-    "D:\\1 - Hard Disk\\6 - Sistema\\3 - Documentos\\GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj": {
+    "C:\\1 - Notebook Things\\3 - GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\1 - Hard Disk\\6 - Sistema\\3 - Documentos\\GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj",
+        "projectUniqueName": "C:\\1 - Notebook Things\\3 - GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj",
         "projectName": "StudyFlow.Api",
-        "projectPath": "D:\\1 - Hard Disk\\6 - Sistema\\3 - Documentos\\GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj",
+        "projectPath": "C:\\1 - Notebook Things\\3 - GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj",
         "packagesPath": "C:\\Users\\rodri\\.nuget\\packages\\",
-        "outputPath": "D:\\1 - Hard Disk\\6 - Sistema\\3 - Documentos\\GitHub\\StudyFlow\\backend\\StudyFlow.Api\\obj\\",
+        "outputPath": "C:\\1 - Notebook Things\\3 - GitHub\\StudyFlow\\backend\\StudyFlow.Api\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -26,7 +26,6 @@
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {

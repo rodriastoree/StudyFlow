@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "gAaznWE0XOg=",
+  "dgSpecHash": "SQxF/jL26yU=",
   "success": true,
-  "projectFilePath": "D:\\1 - Hard Disk\\6 - Sistema\\3 - Documentos\\GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj",
+  "projectFilePath": "C:\\1 - Notebook Things\\3 - GitHub\\StudyFlow\\backend\\StudyFlow.Api\\StudyFlow.Api.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\rodri\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\rodri\\.nuget\\packages\\microsoft.aspnetcore.authentication.jwtbearer\\10.0.11\\microsoft.aspnetcore.authentication.jwtbearer.10.0.11.nupkg.sha512",
