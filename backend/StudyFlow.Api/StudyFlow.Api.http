@@ -1,0 +1,6 @@
+@StudyFlow.Api_HostAddress = https://localhost:7146
+
+GET {{StudyFlow.Api_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+###
