@@ -1,29 +1,22 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using StudyFlow.Api.Models;
 
 namespace StudyFlow.Api.Data;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
-    public DbSet<ApplicationUser> Users => Set<ApplicationUser>();
-
     public DbSet<StudyItem> StudyItems => Set<StudyItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<ApplicationUser>(entity =>
-        {
-            entity.ToTable("application_users");
-
-            entity.HasKey(user => user.Id);
-
-            entity.Property(user => user.Id)
-                .HasColumnName("id")
-                .HasDefaultValueSql("gen_random_uuid()")
-                .ValueGeneratedOnAdd();
-        });
+        modelBuilder.Entity<ApplicationUser>()
+            .Property(user => user.Email)
+            .IsRequired();
 
         modelBuilder.Entity<StudyItem>(entity =>
         {
