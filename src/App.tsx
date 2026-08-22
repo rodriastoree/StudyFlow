@@ -3,8 +3,10 @@ import type { FormEvent, PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { clearAuthSession, persistAuthSession, restoreAuthSession } from './lib/auth/authStorage'
 import type { AuthSession } from './lib/auth/authStorage'
 import { ApiError } from './lib/api/httpClient'
@@ -18,6 +20,8 @@ type StatusColumn = { value: ItemStatus; label: string; color: string }
 const archiveAfterDays = 30
 const taskStatuses = [{ value: 'pending', label: 'Pendiente', color: 'amber' }, { value: 'completed', label: 'Completada', color: 'green' }] as const
 const materialStatuses = [{ value: 'to-summarize', label: 'Por resumir', color: 'violet' }, { value: 'summarized', label: 'Resumido', color: 'blue' }, { value: 'printed', label: 'Impreso', color: 'slate' }] as const
+const itemTypeLabels: Record<ItemType, string> = { task: 'Tarea', material: 'Material' }
+const itemStatusLabels: Record<ItemStatus, string> = { pending: 'Pendiente', completed: 'Completada', 'to-summarize': 'Para resumir', summarized: 'Resumido', printed: 'Impreso' }
 
 function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDown, onPointerMove, onPointerUp, onArchive, onRestore, onDelete }: { columns: readonly StatusColumn[]; items: StudyItem[]; itemType: ItemType; draggedItem: StudyItem | null; dropTarget: ItemStatus | null; onPointerDown: (event: PointerEvent<HTMLElement>, item: StudyItem) => void; onPointerMove: (event: PointerEvent<HTMLElement>) => void; onPointerUp: (event: PointerEvent<HTMLElement>) => void; onArchive?: (id: string) => void; onRestore?: (id: string) => void; onDelete: (item: StudyItem) => void }) {
   return <div className={`board columns-${columns.length}`}>{columns.map((column) => { const columnItems = items.filter((item) => item.status === column.value); const isDropTarget = dropTarget === column.value && draggedItem?.type === itemType; return <section className={`board-column ${isDropTarget ? 'is-drop-target' : ''}`} data-drop-status={column.value} data-drop-type={itemType} key={column.value}><div className="column-heading"><span className={`status-dot ${column.color}`} /><h3>{column.label}</h3><span className="task-count">{columnItems.length}</span></div><div className="task-list">{columnItems.length === 0 ? <p className="empty-column">Soltá un elemento aquí.</p> : columnItems.map((item) => <article className={`task-card ${draggedItem?.id === item.id ? 'is-dragging' : ''}`} key={item.id} onPointerDown={(event) => onPointerDown(event, item)} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}><div className="card-topline"><p className="subject">{item.subject}</p><div className="card-controls"><button className="delete-button" type="button" aria-label={`Eliminar ${item.title}`} title="Eliminar" onPointerDown={(event) => event.stopPropagation()} onClick={() => onDelete(item)}>×</button><span className="drag-handle" aria-hidden="true">⠿</span></div></div><h4>{item.title}</h4><p className="drag-hint">Mantené y arrastrá para mover</p>{item.type === 'material' && item.status === 'printed' && onArchive && <button className="card-action" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onArchive(item.id)}>Archivar ahora</button>}{onRestore && <button className="card-action" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onRestore(item.id)}>Mostrar 30 días</button>}</article>)}</div></section> })}</div>
@@ -95,7 +99,73 @@ function App() {
   )
   if (showSettings) return <main className="app-shell"><header className="topbar"><div><p className="eyebrow">STUDYFLOW</p><h1>Configuración</h1></div><button className="text-button" type="button" onClick={() => setShowSettings(false)}>← Volver al tablero</button></header><section className="settings-card"><p className="eyebrow">CUENTA</p><h2>Tu cuenta</h2><p>{authSession.email}</p></section></main>
 
-  return <main className="app-shell"><header className="topbar"><div><p className="eyebrow">TU ORGANIZADOR ACADÉMICO</p><h1>StudyFlow</h1></div><div className="header-actions"><span className="user-email">{authSession.email}</span><button className="text-button" type="button" onClick={() => setShowSettings(true)}>Configuración</button><button className="text-button" type="button" onClick={logout}>Cerrar sesión</button><button className="primary-button" type="button" onClick={() => setIsFormOpen(true)}>+ Nuevo elemento</button></div></header>{error && <p className="app-error">{error}</p>}<section className="welcome"><div><p className="day-label">TU ESPACIO DE ORGANIZACIÓN</p><h2>Tu tablero de estudio</h2><p>Tomá una tarjeta y llevala al siguiente estado.</p></div><div className="summary"><div><strong>{pendingCount}</strong><span>Pendientes</span></div><div><strong>{toSummarizeCount}</strong><span>Por resumir</span></div><div><strong>{readyToPrintCount}</strong><span>Para imprimir</span></div></div></section><section className="board-section"><div className="section-heading"><div><p className="eyebrow">ACTIVIDADES</p><h2>Mis tareas</h2></div><span className="section-note">Mantené y arrastrá entre columnas</span></div><Board columns={taskStatuses} items={tasks} itemType="task" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onDelete={setItemToDelete} /></section><section className="board-section materials-section"><div className="section-heading"><div><p className="eyebrow">MATERIAL DE ESTUDIO</p><h2>Resúmenes e impresiones</h2></div><span className="section-note">Mantené y arrastrá entre columnas</span></div><Board columns={materialStatuses} items={activeMaterials} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />{archivedPrinted.length > 0 && <div className="archive-area"><button className="archive-button" type="button" onClick={() => setShowArchived((current) => !current)}>{showArchived ? 'Ocultar impresos archivados' : `Ver impresos archivados (${archivedPrinted.length})`}</button><p>Se archivan automáticamente después de {archiveAfterDays} días o manualmente cuando lo decidas.</p>{showArchived && <Board columns={[{ value: 'printed', label: 'Impresos archivados', color: 'slate' }]} items={archivedPrinted} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onRestore={restoreItem} onDelete={setItemToDelete} />}</div>}</section>{draggedItem && createPortal(<div className="drag-overlay" ref={dragOverlayRef}><p>{draggedItem.subject}</p><strong>{draggedItem.title}</strong><span>Soltá para mover</span></div>, document.body)}{itemToDelete && <div className="modal-backdrop"><section className="creation-modal delete-modal"><p className="eyebrow">ELIMINAR ELEMENTO</p><h2>¿Eliminar “{itemToDelete.title}”?</h2><p className="delete-copy">Esta acción no se puede deshacer.</p><div className="form-actions"><button className="text-button" type="button" onClick={() => setItemToDelete(null)}>Cancelar</button><button className="danger-button" type="button" onClick={() => void deleteItem()}>Eliminar</button></div></section></div>}{isFormOpen && <div className="modal-backdrop"><section className="creation-modal"><button className="close-button" type="button" onClick={() => setIsFormOpen(false)}>×</button><p className="eyebrow">NUEVO ELEMENTO</p><h2>¿Qué querés agregar?</h2><form onSubmit={createItem}><label>Tipo de elemento<select value={itemType} onChange={(event) => changeItemType(event.target.value as ItemType)}><option value="task">Tarea</option><option value="material">Material de estudio</option></select></label><label>Estado<select value={itemStatus} onChange={(event) => setItemStatus(event.target.value as ItemStatus)}>{availableStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}</select></label><label>Título<input name="title" required autoFocus /></label><label>Materia<input name="subject" required /></label><div className="form-actions"><button className="text-button" type="button" onClick={() => setIsFormOpen(false)}>Cancelar</button><button className="primary-button" type="submit">Crear elemento</button></div></form></section></div>}</main>
+  const deleteDialog = (
+    <Dialog open={itemToDelete !== null} onOpenChange={(open) => { if (!open) setItemToDelete(null) }}>
+      {itemToDelete && (
+        <DialogContent className="max-w-[410px] gap-0 rounded-2xl border border-[#34405a] bg-[#191f2b] p-7 text-[#edf0f7] shadow-[0_24px_80px_rgba(0,0,0,0.5)] ring-0 sm:max-w-[410px]" showCloseButton={false}>
+          <DialogHeader className="gap-0">
+            <p className="mb-2 text-[0.72rem] font-[750] tracking-[0.1em] text-[#aebaff]">ELIMINAR ELEMENTO</p>
+            <DialogTitle className="text-[1.25rem] leading-[1.3] font-bold tracking-[-0.04em]">¿Eliminar “{itemToDelete.title}”?</DialogTitle>
+            <DialogDescription className="mt-3 text-[0.86rem] text-[#9facbe]">Esta acción no se puede deshacer.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mx-0 -mb-0 mt-6 flex-row justify-end gap-2.5 border-0 bg-transparent p-0">
+            <Button className="h-auto px-1.5 py-1.5 text-[#9facff] hover:bg-transparent hover:text-[#d5daff]" variant="ghost" type="button" onClick={() => setItemToDelete(null)}>Cancelar</Button>
+            <Button className="h-auto bg-[#db526a] px-[15px] py-2.5 font-extrabold text-[#251017] hover:bg-[#f16c83]" variant="destructive" type="button" onClick={() => void deleteItem()}>Eliminar</Button>
+          </DialogFooter>
+        </DialogContent>
+      )}
+    </Dialog>
+  )
+
+  const studyItemDialog = (
+    <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <DialogContent className="max-w-[470px] gap-0 rounded-2xl border border-[#34405a] bg-[#191f2b] p-7 text-[#edf0f7] shadow-[0_24px_80px_rgba(0,0,0,0.5)] ring-0 sm:max-w-[470px]">
+        <DialogHeader className="gap-0">
+          <p className="mb-2 text-[0.72rem] font-[750] tracking-[0.1em] text-[#aebaff]">NUEVO ELEMENTO</p>
+          <DialogTitle className="text-[1.35rem] leading-tight font-bold tracking-[-0.04em]">¿Qué querés agregar?</DialogTitle>
+          <DialogDescription className="sr-only">Completá los datos para crear un nuevo elemento de estudio.</DialogDescription>
+        </DialogHeader>
+        <form className="mt-6 grid gap-[17px]" onSubmit={createItem}>
+          <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-type">
+            Tipo de elemento
+            <Select items={itemTypeLabels} value={itemType} onValueChange={(value) => changeItemType(value as ItemType)}>
+              <SelectTrigger className="!h-[42px] w-full !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border border-[#46536b] bg-[#252d3c] text-[#d8dfeb] ring-0">
+                <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="task">{itemTypeLabels.task}</SelectItem>
+                <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="material">{itemTypeLabels.material}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Label>
+          <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-status">
+            Estado
+            <Select items={itemStatusLabels} value={itemStatus} onValueChange={(value) => setItemStatus(value as ItemStatus)}>
+              <SelectTrigger className="!h-[42px] w-full !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border border-[#46536b] bg-[#252d3c] text-[#d8dfeb] ring-0">
+                {availableStatuses.map((status) => <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" key={status.value} value={status.value}>{itemStatusLabels[status.value]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Label>
+          <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-title">
+            Título
+            <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-title" name="title" required autoFocus />
+          </Label>
+          <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-subject">
+            Materia
+            <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-subject" name="subject" required />
+          </Label>
+          <DialogFooter className="mx-0 -mb-0 mt-[5px] flex-row justify-end gap-2.5 border-0 bg-transparent p-0">
+            <Button className="h-auto px-1.5 py-1.5 text-[#9facff] hover:bg-transparent hover:text-[#d5daff]" variant="ghost" type="button" onClick={() => setIsFormOpen(false)}>Cancelar</Button>
+            <Button className="h-auto bg-[#7789ff] px-4 py-[11px] font-bold text-[#101429] shadow-[0_8px_20px_rgba(119,137,255,0.23)] hover:bg-[#a3afff]" type="submit">Crear elemento</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+  return <main className="app-shell"><header className="topbar"><div><p className="eyebrow">TU ORGANIZADOR ACADÉMICO</p><h1>StudyFlow</h1></div><div className="header-actions"><span className="user-email">{authSession.email}</span><button className="text-button" type="button" onClick={() => setShowSettings(true)}>Configuración</button><button className="text-button" type="button" onClick={logout}>Cerrar sesión</button><button className="primary-button" type="button" onClick={() => setIsFormOpen(true)}>+ Nuevo elemento</button></div></header>{error && <p className="app-error">{error}</p>}<section className="welcome"><div><p className="day-label">TU ESPACIO DE ORGANIZACIÓN</p><h2>Tu tablero de estudio</h2><p>Tomá una tarjeta y llevala al siguiente estado.</p></div><div className="summary"><div><strong>{pendingCount}</strong><span>Pendientes</span></div><div><strong>{toSummarizeCount}</strong><span>Por resumir</span></div><div><strong>{readyToPrintCount}</strong><span>Para imprimir</span></div></div></section><section className="board-section"><div className="section-heading"><div><p className="eyebrow">ACTIVIDADES</p><h2>Mis tareas</h2></div><span className="section-note">Mantené y arrastrá entre columnas</span></div><Board columns={taskStatuses} items={tasks} itemType="task" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onDelete={setItemToDelete} /></section><section className="board-section materials-section"><div className="section-heading"><div><p className="eyebrow">MATERIAL DE ESTUDIO</p><h2>Resúmenes e impresiones</h2></div><span className="section-note">Mantené y arrastrá entre columnas</span></div><Board columns={materialStatuses} items={activeMaterials} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />{archivedPrinted.length > 0 && <div className="archive-area"><button className="archive-button" type="button" onClick={() => setShowArchived((current) => !current)}>{showArchived ? 'Ocultar impresos archivados' : `Ver impresos archivados (${archivedPrinted.length})`}</button><p>Se archivan automáticamente después de {archiveAfterDays} días o manualmente cuando lo decidas.</p>{showArchived && <Board columns={[{ value: 'printed', label: 'Impresos archivados', color: 'slate' }]} items={archivedPrinted} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onRestore={restoreItem} onDelete={setItemToDelete} />}</div>}</section>{draggedItem && createPortal(<div className="drag-overlay" ref={dragOverlayRef}><p>{draggedItem.subject}</p><strong>{draggedItem.title}</strong><span>Soltá para mover</span></div>, document.body)}{deleteDialog}{studyItemDialog}</main>
 }
 
 export default App
