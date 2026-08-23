@@ -2,10 +2,10 @@ using System.ComponentModel.DataAnnotations;
 
 namespace StudyFlow.Api.Dtos.StudyItems;
 
-public sealed class CreateStudyItemRequest
+public sealed class CreateStudyItemRequest : IValidatableObject
 {
     [Required]
-    [RegularExpression("^(task|material)$")]
+    [RegularExpression("^(task|material|practical-work|exam)$")]
     public string Type { get; set; } = string.Empty;
 
     [Required]
@@ -20,5 +20,22 @@ public sealed class CreateStudyItemRequest
     [RegularExpression("^(pending|completed|to-summarize|summarized|printed)$")]
     public string Status { get; set; } = string.Empty;
 
-    public DateTimeOffset? PrintedAt { get; set; }
+    public DateOnly? DueDate { get; set; }
+
+    [StringLength(20)]
+    [RegularExpression("^(partial|final|recovery)$")]
+    public string? ExamType { get; set; }
+
+    [StringLength(100)]
+    public string? ExamInstance { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        return StudyItemRequestValidation.Validate(
+            Type,
+            Status,
+            DueDate,
+            ExamType,
+            ExamInstance);
+    }
 }

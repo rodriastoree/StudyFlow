@@ -34,7 +34,12 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
                 Title = item.Title,
                 Subject = item.Subject,
                 Status = item.Status,
+                DueDate = item.DueDate,
+                ExamType = item.ExamType,
+                ExamInstance = item.ExamInstance,
                 PrintedAt = item.PrintedAt,
+                IsArchived = item.IsArchived,
+                ArchivedAt = item.ArchivedAt,
                 ArchivedManually = item.IsArchived,
                 CreatedAt = item.CreatedAt,
                 UpdatedAt = item.UpdatedAt,
@@ -63,7 +68,12 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
                 Title = item.Title,
                 Subject = item.Subject,
                 Status = item.Status,
+                DueDate = item.DueDate,
+                ExamType = item.ExamType,
+                ExamInstance = item.ExamInstance,
                 PrintedAt = item.PrintedAt,
+                IsArchived = item.IsArchived,
+                ArchivedAt = item.ArchivedAt,
                 ArchivedManually = item.IsArchived,
                 CreatedAt = item.CreatedAt,
                 UpdatedAt = item.UpdatedAt,
@@ -82,6 +92,7 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
         }
 
         var now = DateTimeOffset.UtcNow;
+        var status = GetStoredStatus(request.Type, request.Status);
         var item = new StudyItem
         {
             Id = Guid.NewGuid(),
@@ -89,9 +100,13 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
             Type = request.Type,
             Title = request.Title,
             Subject = request.Subject,
-            Status = request.Status,
-            PrintedAt = request.PrintedAt,
+            Status = status,
+            DueDate = request.DueDate,
+            ExamType = NormalizeOptional(request.ExamType),
+            ExamInstance = NormalizeOptional(request.ExamInstance),
+            PrintedAt = IsPrintedMaterial(request.Type, status) ? now : null,
             IsArchived = false,
+            ArchivedAt = null,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -119,13 +134,39 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
             return NotFound();
         }
 
+        var now = DateTimeOffset.UtcNow;
+        var status = GetStoredStatus(request.Type, request.Status);
+        var wasPrinted = IsPrintedMaterial(item.Type, item.Status);
+        var willBePrinted = IsPrintedMaterial(request.Type, status);
+        var requestedIsArchived = request.IsArchived
+            ?? request.ArchivedManually
+            ?? item.IsArchived;
+        var isRestoring = item.IsArchived && !requestedIsArchived;
+
         item.Type = request.Type;
         item.Title = request.Title;
         item.Subject = request.Subject;
-        item.Status = request.Status;
-        item.PrintedAt = request.PrintedAt;
-        item.IsArchived = request.ArchivedManually;
-        item.UpdatedAt = DateTimeOffset.UtcNow;
+        item.Status = status;
+        item.DueDate = request.DueDate;
+        item.ExamType = NormalizeOptional(request.ExamType);
+        item.ExamInstance = NormalizeOptional(request.ExamInstance);
+        item.PrintedAt = willBePrinted
+            ? !wasPrinted || isRestoring
+                ? now
+                : item.PrintedAt ?? now
+            : null;
+
+        if (requestedIsArchived != item.IsArchived)
+        {
+            item.IsArchived = requestedIsArchived;
+            item.ArchivedAt = requestedIsArchived ? now : null;
+        }
+        else if (!requestedIsArchived)
+        {
+            item.ArchivedAt = null;
+        }
+
+        item.UpdatedAt = now;
 
         await dbContext.SaveChangesAsync();
 
@@ -162,6 +203,21 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
         return Guid.TryParse(value, out userId);
     }
 
+    private static string GetStoredStatus(string type, string requestedStatus)
+    {
+        return type == "exam" ? "pending" : requestedStatus;
+    }
+
+    private static bool IsPrintedMaterial(string type, string status)
+    {
+        return type == "material" && status == "printed";
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
     private static StudyItemResponse ToResponse(StudyItem item)
     {
         return new StudyItemResponse
@@ -172,7 +228,12 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
             Title = item.Title,
             Subject = item.Subject,
             Status = item.Status,
+            DueDate = item.DueDate,
+            ExamType = item.ExamType,
+            ExamInstance = item.ExamInstance,
             PrintedAt = item.PrintedAt,
+            IsArchived = item.IsArchived,
+            ArchivedAt = item.ArchivedAt,
             ArchivedManually = item.IsArchived,
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt,
