@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Archive, BookOpen, CalendarDays, ClipboardCheck, Clock3, Eye, EyeOff, GripVertical, Inbox, LayoutDashboard, LogOut, Plus, Printer, RotateCcw, Settings, Trash2, UserRound } from 'lucide-react'
+import { Archive, BookOpen, CalendarDays, ClipboardCheck, Clock3, GripVertical, Inbox, LayoutDashboard, LogOut, Plus, Printer, RotateCcw, Settings, Trash2, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { CalendarSection } from '@/components/calendar/CalendarSection'
+import { ExamsSection } from '@/components/exams/ExamsSection'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -82,7 +84,7 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
         return (
           <section
             className={[
-              'relative min-h-[330px] overflow-hidden rounded-2xl border p-3.5 shadow-[0_18px_45px_rgba(2,6,23,0.18)] transition-all duration-200',
+              'relative min-h-[280px] overflow-hidden rounded-2xl border p-3 shadow-[0_18px_45px_rgba(2,6,23,0.18)] transition-all duration-200',
               isDropTarget
                 ? '-translate-y-1 border-[#6785ff] bg-[#182544] ring-2 ring-[#6785ff]/30 shadow-[0_24px_60px_rgba(28,52,120,0.28)]'
                 : 'border-[#26354d] bg-[linear-gradient(180deg,rgba(20,30,48,0.96),rgba(13,21,35,0.98))] hover:border-[#344763]',
@@ -97,9 +99,9 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
               <Badge className="h-6 min-w-6 rounded-full border border-[#3b4b65] bg-[#22304a] px-2 text-[0.72rem] font-bold text-[#c4cee0]" variant="outline">{columnItems.length}</Badge>
             </div>
 
-            <div className="mt-3 grid min-h-[248px] content-start gap-3 rounded-xl border border-dashed border-[#273750] bg-[#0b1423]/55 p-2.5">
+            <div className="mt-3 grid min-h-[198px] content-start gap-3 rounded-xl border border-dashed border-[#273750] bg-[#0b1423]/55 p-2.5">
               {columnItems.length === 0 ? (
-                <div className={['flex min-h-[210px] flex-col items-center justify-center rounded-lg border px-5 text-center transition-colors', isDropTarget ? 'border-[#6580ee]/70 bg-[#1b2a50]/80 text-[#d2dcff]' : 'border-transparent text-[#71809a]'].join(' ')}>
+                <div className={['flex min-h-[160px] flex-col items-center justify-center rounded-lg border px-5 text-center transition-colors', isDropTarget ? 'border-[#6580ee]/70 bg-[#1b2a50]/80 text-[#d2dcff]' : 'border-transparent text-[#71809a]'].join(' ')}>
                   <span className="mb-3 flex size-10 items-center justify-center rounded-xl border border-[#2d3e59] bg-[#162238]">
                     <Inbox className="size-4.5" aria-hidden="true" />
                   </span>
@@ -187,30 +189,20 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
 
 function ModuleArchive({ title, emptyMessage, items, itemType, isOpen, onToggle, onRestore, onDelete }: { title: string; emptyMessage: string; items: StudyItem[]; itemType: ArchivableItemType; isOpen: boolean; onToggle: () => void; onRestore: (id: string) => void; onDelete: (item: StudyItem) => void }) {
   return (
-    <div className="mt-6 border-t border-[#24344c] pt-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#293a54] bg-[#101b2c]/85 px-4 py-3.5">
-        <div className="flex items-center gap-3">
-          <span className="flex size-9 items-center justify-center rounded-lg border border-[#3b4c67] bg-[#1c2940] text-[#9aabc4]">
-            <Archive className="size-4" aria-hidden="true" />
-          </span>
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-[0.88rem] font-semibold text-[#dce4ef]">{title}</h3>
-              <Badge className="h-6 min-w-6 rounded-full border-[#3b4c65] bg-[#22304a] px-2 text-[0.7rem] font-bold text-[#bdc8da]" variant="outline">{items.length}</Badge>
-            </div>
-            <p className="mt-1 text-[0.7rem] text-[#73839b]">Elementos archivados de este módulo.</p>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (open !== isOpen) onToggle() }}>
+      <DialogContent className="max-h-[88vh] gap-0 overflow-y-auto rounded-2xl border border-[#34405a] bg-[#121b2a] p-5 text-[#edf0f7] shadow-[0_24px_80px_rgba(0,0,0,0.55)] ring-0 sm:max-w-[1100px] sm:p-7 [&_[data-slot=dialog-close]]:text-[#94a2b7] [&_[data-slot=dialog-close]]:hover:bg-[#263247] [&_[data-slot=dialog-close]]:hover:text-white">
+        <DialogHeader className="gap-0 pr-10">
+          <p className="mb-2 text-[0.68rem] font-bold tracking-[0.12em] text-[#8799b5] uppercase">Archivo</p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <DialogTitle className="text-[1.35rem] leading-tight font-bold tracking-[-0.04em] text-[#f1f4f9]">{title}</DialogTitle>
+            <Badge className="h-6 min-w-6 rounded-full border-[#3b4c65] bg-[#22304a] px-2 text-[0.7rem] font-bold text-[#bdc8da]" variant="outline">{items.length}</Badge>
           </div>
-        </div>
-        <Button className="h-9 gap-2 rounded-lg border-[#3b4d69] bg-[#1b2940] px-3 text-[0.74rem] font-semibold text-[#b5c2d5] hover:bg-[#263850] hover:text-white" variant="outline" type="button" onClick={onToggle}>
-          {isOpen ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-          {isOpen ? 'Ocultar archivo' : 'Abrir archivo'}
-        </Button>
-      </div>
+          <DialogDescription className="mt-2 text-[0.78rem] text-[#7f8ea4]">Elementos archivados de este módulo. Podés restaurarlos o eliminarlos definitivamente.</DialogDescription>
+        </DialogHeader>
 
-      {isOpen && (
-        <div className="mt-4">
+        <div className="mt-6">
           {items.length === 0 ? (
-            <div className="flex min-h-28 flex-col items-center justify-center rounded-2xl border border-dashed border-[#2a3a52] bg-[#0b1421]/55 px-5 py-7 text-center text-[#74839a]">
+            <div className="flex min-h-36 flex-col items-center justify-center rounded-2xl border border-dashed border-[#2a3a52] bg-[#0b1421]/55 px-5 py-8 text-center text-[#74839a]">
               <Archive className="mb-3 size-5" aria-hidden="true" />
               <strong className="text-[0.82rem] font-semibold text-[#93a1b5]">{emptyMessage}</strong>
             </div>
@@ -218,11 +210,10 @@ function ModuleArchive({ title, emptyMessage, items, itemType, isOpen, onToggle,
             <Board columns={archiveStatuses} items={items} itemType={itemType} draggedItem={null} dropTarget={null} onRestore={onRestore} onDelete={onDelete} isDraggable={false} archivedView />
           )}
         </div>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
-
 function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(null)
   const [items, setItems] = useState<StudyItem[]>([])
@@ -479,12 +470,12 @@ function App() {
     </Dialog>
   )
   return (
-    <main className="dark relative isolate mx-auto w-[min(1280px,calc(100%_-_48px))] pt-7 pb-20 max-[760px]:w-[min(100%_-_28px,620px)] max-[760px]:pt-4">
+    <main className="dark relative isolate mx-auto w-[min(1760px,calc(100%_-_48px))] pt-4 pb-16 max-[760px]:w-[min(100%_-_28px,620px)]">
       <div className="pointer-events-none absolute -inset-x-12 -top-32 -z-10 h-[580px] bg-[radial-gradient(circle_at_18%_20%,rgba(48,74,142,0.2),transparent_34%),radial-gradient(circle_at_82%_8%,rgba(38,93,112,0.14),transparent_28%)]" />
 
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#273750] bg-[#101a2b]/95 px-4 py-3.5 shadow-[0_18px_48px_rgba(2,6,23,0.26),inset_0_1px_0_rgba(255,255,255,0.025)] backdrop-blur-xl sm:px-5">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#273750] bg-[#101a2b]/95 px-4 py-2.5 shadow-[0_18px_48px_rgba(2,6,23,0.26),inset_0_1px_0_rgba(255,255,255,0.025)] backdrop-blur-xl sm:px-5">
         <div className="flex min-w-0 items-center gap-3.5">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#4662a0] bg-[linear-gradient(145deg,#38558f,#243961)] text-[#dbe6ff] shadow-[0_8px_22px_rgba(34,61,124,0.34)]">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#4662a0] bg-[linear-gradient(145deg,#38558f,#243961)] text-[#dbe6ff] shadow-[0_8px_22px_rgba(34,61,124,0.34)]">
             <BookOpen className="size-5" aria-hidden="true" />
           </span>
           <div className="min-w-0">
@@ -518,82 +509,106 @@ function App() {
 
       {error && <p className="app-error">{error}</p>}
 
-      <section className="relative mt-7 overflow-hidden rounded-[26px] border border-[#2b3d5b] bg-[radial-gradient(circle_at_top_right,rgba(65,95,173,0.2),transparent_38%),linear-gradient(135deg,#15223a,#101a2c_58%,#0d1d2b)] shadow-[0_24px_70px_rgba(2,6,23,0.3),inset_0_1px_0_rgba(255,255,255,0.03)]">
-        <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.05fr_1.65fr] lg:items-center">
+      <section className="relative mt-5 overflow-hidden rounded-[26px] border border-[#2b3d5b] bg-[radial-gradient(circle_at_top_right,rgba(65,95,173,0.2),transparent_38%),linear-gradient(135deg,#15223a,#101a2c_58%,#0d1d2b)] shadow-[0_24px_70px_rgba(2,6,23,0.3),inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[1.05fr_1.65fr] lg:items-center">
           <div>
-            <span className="mb-5 flex size-12 items-center justify-center rounded-2xl border border-[#3f5785] bg-[#1e3152] text-[#9eb6ff] shadow-[0_10px_28px_rgba(24,49,102,0.35)]">
+            <span className="mb-3 flex size-10 items-center justify-center rounded-xl border border-[#3f5785] bg-[#1e3152] text-[#9eb6ff] shadow-[0_10px_28px_rgba(24,49,102,0.35)]">
               <LayoutDashboard className="size-5.5" aria-hidden="true" />
             </span>
             <p className="text-[0.68rem] font-bold tracking-[0.14em] text-[#7f94bb] uppercase">Vista general</p>
-            <h2 className="mt-2 text-[clamp(1.7rem,3vw,2.25rem)] font-bold tracking-[-0.055em] text-[#f4f7fb]">Tu tablero de estudio</h2>
-            <p className="mt-3 max-w-md text-[0.88rem] leading-6 text-[#91a0b8]">Organizá tus tareas, trabajos prácticos y materiales en un flujo claro. Arrastrá cada tarjeta para avanzar al siguiente estado.</p>
+            <h2 className="mt-1.5 text-[clamp(1.55rem,3vw,2rem)] font-bold tracking-[-0.055em] text-[#f4f7fb]">Tu tablero de estudio</h2>
+            <p className="mt-2 max-w-md text-[0.84rem] leading-5 text-[#91a0b8]">Organizá tus tareas, trabajos prácticos y materiales en un flujo claro. Arrastrá cada tarjeta para avanzar al siguiente estado.</p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="gap-0 rounded-2xl border border-[#4b422d] bg-[#211e1b]/85 p-4 py-4 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.2)]">
+            <Card className="gap-0 rounded-2xl border border-[#4b422d] bg-[#211e1b]/85 p-3.5 py-3.5 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.2)]">
               <div className="flex items-start justify-between gap-3">
                 <span className="flex size-9 items-center justify-center rounded-xl border border-[#5f5130] bg-[#30291d] text-[#efbd5d]"><Clock3 className="size-4" aria-hidden="true" /></span>
-                <strong className="text-3xl font-bold tracking-[-0.05em] text-[#f4c76f]">{pendingCount}</strong>
+                <strong className="text-2xl font-bold tracking-[-0.05em] text-[#f4c76f]">{pendingCount}</strong>
               </div>
-              <span className="mt-5 text-[0.76rem] font-semibold text-[#c2b796]">Pendientes</span>
+              <span className="mt-3 text-[0.76rem] font-semibold text-[#c2b796]">Pendientes</span>
               <span className="mt-1 text-[0.68rem] text-[#7f796c]">Tareas por completar</span>
             </Card>
-            <Card className="gap-0 rounded-2xl border border-[#493c61] bg-[#201d2e]/85 p-4 py-4 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.2)]">
+            <Card className="gap-0 rounded-2xl border border-[#493c61] bg-[#201d2e]/85 p-3.5 py-3.5 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.2)]">
               <div className="flex items-start justify-between gap-3">
                 <span className="flex size-9 items-center justify-center rounded-xl border border-[#574870] bg-[#2c2540] text-[#c5a5ff]"><BookOpen className="size-4" aria-hidden="true" /></span>
-                <strong className="text-3xl font-bold tracking-[-0.05em] text-[#c5a5ff]">{toSummarizeCount}</strong>
+                <strong className="text-2xl font-bold tracking-[-0.05em] text-[#c5a5ff]">{toSummarizeCount}</strong>
               </div>
-              <span className="mt-5 text-[0.76rem] font-semibold text-[#bab0ce]">Por resumir</span>
+              <span className="mt-3 text-[0.76rem] font-semibold text-[#bab0ce]">Por resumir</span>
               <span className="mt-1 text-[0.68rem] text-[#797184]">Materiales pendientes</span>
             </Card>
-            <Card className="gap-0 rounded-2xl border border-[#314e65] bg-[#172530]/85 p-4 py-4 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.2)]">
+            <Card className="gap-0 rounded-2xl border border-[#314e65] bg-[#172530]/85 p-3.5 py-3.5 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.2)]">
               <div className="flex items-start justify-between gap-3">
                 <span className="flex size-9 items-center justify-center rounded-xl border border-[#3b5d76] bg-[#1c3140] text-[#7ec5ed]"><Printer className="size-4" aria-hidden="true" /></span>
-                <strong className="text-3xl font-bold tracking-[-0.05em] text-[#81c7ed]">{printedCount}</strong>
+                <strong className="text-2xl font-bold tracking-[-0.05em] text-[#81c7ed]">{printedCount}</strong>
               </div>
-              <span className="mt-5 text-[0.76rem] font-semibold text-[#a8bfce]">Impresos</span>
+              <span className="mt-3 text-[0.76rem] font-semibold text-[#a8bfce]">Impresos</span>
               <span className="mt-1 text-[0.68rem] text-[#6f818d]">Materiales impresos</span>
             </Card>
           </div>
         </div>
       </section>
 
-      <section className="mt-7 rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-6">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4 px-1">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl border border-[#594c2f] bg-[#2a251c] text-[#e8b95d]">
-              <Clock3 className="size-4.5" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-[0.66rem] font-bold tracking-[0.13em] text-[#7788a3] uppercase">Actividades</p>
-              <h2 className="mt-1 text-[1.35rem] font-bold tracking-[-0.04em] text-[#edf2f8]">Mis tareas</h2>
+      <div className="mt-5 grid items-stretch gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(340px,1fr)]">
+        <div className="min-w-0">
+          <CalendarSection items={items} />
+        </div>
+        <div className="min-w-0">
+          <ExamsSection items={items} onDelete={setItemToDelete} />
+        </div>
+      </div>
+
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-2">
+        <section className="h-full rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-5">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3 px-1">
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 items-center justify-center rounded-xl border border-[#594c2f] bg-[#2a251c] text-[#e8b95d]">
+                <Clock3 className="size-4.5" aria-hidden="true" />
+              </span>
+              <div>
+                <p className="text-[0.66rem] font-bold tracking-[0.13em] text-[#7788a3] uppercase">Actividades</p>
+                <h2 className="mt-1 text-[1.35rem] font-bold tracking-[-0.04em] text-[#edf2f8]">Mis tareas</h2>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
+              <Button className="h-8 gap-1.5 rounded-lg border-[#3b4d69] bg-[#1b2940] px-3 text-[0.72rem] font-semibold text-[#b5c2d5] hover:bg-[#263850] hover:text-white" variant="outline" size="sm" type="button" onClick={() => toggleArchive('task')}>
+                <Archive className="size-3.5" aria-hidden="true" />
+                Ver archivo
+                <Badge className="ml-0.5 h-5 min-w-5 rounded-full border-[#4a5a73] bg-[#27354a] px-1.5 text-[0.62rem] text-[#c9d2df]" variant="outline">{archivedTasks.length}</Badge>
+              </Button>
             </div>
           </div>
-          <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
-        </div>
-        <Board columns={taskStatuses} items={tasks} itemType="task" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
-        <ModuleArchive title="Archivo de tareas" emptyMessage="Todavía no hay tareas archivadas" items={archivedTasks} itemType="task" isOpen={openArchives.task} onToggle={() => toggleArchive('task')} onRestore={restoreItem} onDelete={setItemToDelete} />
-      </section>
+          <Board columns={taskStatuses} items={tasks} itemType="task" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+          <ModuleArchive title="Archivo de tareas" emptyMessage="Todavía no hay tareas archivadas" items={archivedTasks} itemType="task" isOpen={openArchives.task} onToggle={() => toggleArchive('task')} onRestore={restoreItem} onDelete={setItemToDelete} />
+        </section>
 
-      <section className="mt-7 rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-6">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4 px-1">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl border border-[#5d4d2d] bg-[#2d271b] text-[#e4bd62]">
-              <ClipboardCheck className="size-4.5" aria-hidden="true" />
-            </span>
-            <div>
-              <p className="text-[0.66rem] font-bold tracking-[0.13em] text-[#7788a3] uppercase">Entregas</p>
-              <h2 className="mt-1 text-[1.35rem] font-bold tracking-[-0.04em] text-[#edf2f8]">Trabajos prácticos</h2>
+        <section className="h-full rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-5">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3 px-1">
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 items-center justify-center rounded-xl border border-[#5d4d2d] bg-[#2d271b] text-[#e4bd62]">
+                <ClipboardCheck className="size-4.5" aria-hidden="true" />
+              </span>
+              <div>
+                <p className="text-[0.66rem] font-bold tracking-[0.13em] text-[#7788a3] uppercase">Entregas</p>
+                <h2 className="mt-1 text-[1.35rem] font-bold tracking-[-0.04em] text-[#edf2f8]">Trabajos prácticos</h2>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
+              <Button className="h-8 gap-1.5 rounded-lg border-[#3b4d69] bg-[#1b2940] px-3 text-[0.72rem] font-semibold text-[#b5c2d5] hover:bg-[#263850] hover:text-white" variant="outline" size="sm" type="button" onClick={() => toggleArchive('practical-work')}>
+                <Archive className="size-3.5" aria-hidden="true" />
+                Ver archivo
+                <Badge className="ml-0.5 h-5 min-w-5 rounded-full border-[#4a5a73] bg-[#27354a] px-1.5 text-[0.62rem] text-[#c9d2df]" variant="outline">{archivedPracticalWorks.length}</Badge>
+              </Button>
             </div>
           </div>
-          <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
-        </div>
-        <Board columns={practicalWorkStatuses} items={practicalWorks} itemType="practical-work" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
-        <ModuleArchive title="Archivo de trabajos prácticos" emptyMessage="Todavía no hay trabajos prácticos archivados" items={archivedPracticalWorks} itemType="practical-work" isOpen={openArchives['practical-work']} onToggle={() => toggleArchive('practical-work')} onRestore={restoreItem} onDelete={setItemToDelete} />
-      </section>
+          <Board columns={practicalWorkStatuses} items={practicalWorks} itemType="practical-work" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+          <ModuleArchive title="Archivo de trabajos prácticos" emptyMessage="Todavía no hay trabajos prácticos archivados" items={archivedPracticalWorks} itemType="practical-work" isOpen={openArchives['practical-work']} onToggle={() => toggleArchive('practical-work')} onRestore={restoreItem} onDelete={setItemToDelete} />
+        </section>
 
-      <section className="mt-7 rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-6">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4 px-1">
+        <section className="rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-5 xl:col-span-2">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3 px-1">
           <div className="flex items-center gap-3">
             <span className="flex size-10 items-center justify-center rounded-xl border border-[#443b62] bg-[#252039] text-[#bca0f0]">
               <BookOpen className="size-4.5" aria-hidden="true" />
@@ -603,11 +618,20 @@ function App() {
               <h2 className="mt-1 text-[1.35rem] font-bold tracking-[-0.04em] text-[#edf2f8]">Material de estudio</h2>
             </div>
           </div>
-          <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
+            <Button className="h-8 gap-1.5 rounded-lg border-[#3b4d69] bg-[#1b2940] px-3 text-[0.72rem] font-semibold text-[#b5c2d5] hover:bg-[#263850] hover:text-white" variant="outline" size="sm" type="button" onClick={() => toggleArchive('material')}>
+              <Archive className="size-3.5" aria-hidden="true" />
+              Ver archivo
+              <Badge className="ml-0.5 h-5 min-w-5 rounded-full border-[#4a5a73] bg-[#27354a] px-1.5 text-[0.62rem] text-[#c9d2df]" variant="outline">{archivedMaterials.length}</Badge>
+            </Button>
+          </div>
         </div>
         <Board columns={materialStatuses} items={activeMaterials} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
         <ModuleArchive title="Archivo de materiales" emptyMessage="Todavía no hay materiales archivados" items={archivedMaterials} itemType="material" isOpen={openArchives.material} onToggle={() => toggleArchive('material')} onRestore={restoreItem} onDelete={setItemToDelete} />
-      </section>
+        </section>
+      </div>
+
       {draggedItem && createPortal(
         <div className="pointer-events-none fixed z-30 min-w-[240px] -translate-x-1/2 -translate-y-1/2 scale-[1.03] rounded-xl border border-[#7891ed] bg-[linear-gradient(145deg,#233453,#16253c)] px-4 py-3.5 text-[#f0f5fc] shadow-[0_24px_60px_rgba(2,6,23,0.58),0_0_0_1px_rgba(132,154,239,0.18)]" ref={dragOverlayRef}>
           <p className="mb-1.5 text-[0.66rem] font-bold tracking-[0.11em] text-[#aebeff] uppercase">{draggedItem.subject}</p>
