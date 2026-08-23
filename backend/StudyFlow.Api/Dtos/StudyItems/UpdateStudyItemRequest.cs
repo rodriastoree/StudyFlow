@@ -8,9 +8,8 @@ public sealed class UpdateStudyItemRequest : IValidatableObject
     [RegularExpression("^(task|material|practical-work|exam)$")]
     public string Type { get; set; } = string.Empty;
 
-    [Required]
     [StringLength(160)]
-    public string Title { get; set; } = string.Empty;
+    public string? Title { get; set; }
 
     [Required]
     [StringLength(100)]
@@ -37,6 +36,7 @@ public sealed class UpdateStudyItemRequest : IValidatableObject
     {
         foreach (var result in StudyItemRequestValidation.Validate(
                      Type,
+                     Title,
                      Status,
                      DueDate,
                      ExamType,

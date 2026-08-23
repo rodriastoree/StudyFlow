@@ -6,6 +6,7 @@ internal static class StudyItemRequestValidation
 {
     public static IEnumerable<ValidationResult> Validate(
         string type,
+        string? title,
         string status,
         DateOnly? dueDate,
         string? examType,
@@ -13,6 +14,13 @@ internal static class StudyItemRequestValidation
     {
         var hasExamType = !string.IsNullOrWhiteSpace(examType);
         var hasExamInstance = !string.IsNullOrWhiteSpace(examInstance);
+
+        if (type != "exam" && string.IsNullOrWhiteSpace(title))
+        {
+            yield return new ValidationResult(
+                "El título es obligatorio.",
+                ["Title"]);
+        }
 
         switch (type)
         {
@@ -78,13 +86,6 @@ internal static class StudyItemRequestValidation
                     yield return new ValidationResult(
                         "El tipo de examen es obligatorio.",
                         ["ExamType"]);
-                }
-
-                if (!hasExamInstance)
-                {
-                    yield return new ValidationResult(
-                        "La instancia del examen es obligatoria.",
-                        ["ExamInstance"]);
                 }
 
                 break;

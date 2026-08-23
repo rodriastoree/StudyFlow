@@ -98,7 +98,7 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
             Id = Guid.NewGuid(),
             UserId = userId,
             Type = request.Type,
-            Title = request.Title,
+            Title = GetStoredTitle(request.Type, request.ExamType, request.Title),
             Subject = request.Subject,
             Status = status,
             DueDate = request.DueDate,
@@ -142,9 +142,18 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
             ?? request.ArchivedManually
             ?? item.IsArchived;
         var isRestoring = item.IsArchived && !requestedIsArchived;
+        var isArchiving = !item.IsArchived && requestedIsArchived;
+
+        if (isArchiving && !CanArchiveManually(request.Type, status))
+        {
+            ModelState.AddModelError(
+                nameof(request.IsArchived),
+                "Solo pueden archivarse tareas y trabajos prácticos completados, y materiales impresos.");
+            return ValidationProblem(ModelState);
+        }
 
         item.Type = request.Type;
-        item.Title = request.Title;
+        item.Title = GetStoredTitle(request.Type, request.ExamType, request.Title);
         item.Subject = request.Subject;
         item.Status = status;
         item.DueDate = request.DueDate;
@@ -206,6 +215,33 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
     private static string GetStoredStatus(string type, string requestedStatus)
     {
         return type == "exam" ? "pending" : requestedStatus;
+    }
+
+    private static string GetStoredTitle(string type, string? examType, string? requestedTitle)
+    {
+        if (type != "exam")
+        {
+            return requestedTitle!.Trim();
+        }
+
+        return examType switch
+        {
+            "partial" => "Parcial",
+            "final" => "Final",
+            "recovery" => "Recuperatorio",
+            _ => throw new InvalidOperationException("El tipo de examen validado no es válido."),
+        };
+    }
+
+    private static bool CanArchiveManually(string type, string status)
+    {
+        return type switch
+        {
+            "task" or "practical-work" => status == "completed",
+            "material" => status == "printed",
+            "exam" => true,
+            _ => false,
+        };
     }
 
     private static bool IsPrintedMaterial(string type, string status)

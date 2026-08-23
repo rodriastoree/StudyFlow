@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Archive, BookOpen, CalendarDays, Clock3, Eye, EyeOff, GripVertical, Inbox, LayoutDashboard, LogOut, Plus, Printer, RotateCcw, Settings, Trash2, UserRound } from 'lucide-react'
+import { Archive, BookOpen, CalendarDays, ClipboardCheck, Clock3, Eye, EyeOff, GripVertical, Inbox, LayoutDashboard, LogOut, Plus, Printer, RotateCcw, Settings, Trash2, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -14,19 +14,30 @@ import type { AuthSession } from './lib/auth/authStorage'
 import { ApiError } from './lib/api/httpClient'
 import { login, register } from './services/authService'
 import { createStudyItem, deleteStudyItem, getStudyItems, updateStudyItem } from './services/studyItemsService'
-import type { StudyItem, StudyItemStatus as ItemStatus, StudyItemType as ItemType } from './types/api/studyItems'
+import type { StudyItem, StudyItemExamType as ItemExamType, StudyItemStatus as ItemStatus, StudyItemType as ItemType } from './types/api/studyItems'
 import './App.css'
 
-type StatusColumn = { value: ItemStatus; label: string; color: string }
+type BoardColumnValue = ItemStatus | 'archived'
+type StatusColumn = { value: BoardColumnValue; label: string; color: string }
+type ArchivableItemType = Exclude<ItemType, 'exam'>
 
-const archiveAfterDays = 30
+const archiveStatuses = [{ value: 'archived', label: 'Archivado', color: 'slate' }] as const
 const taskStatuses = [{ value: 'pending', label: 'Pendiente', color: 'amber' }, { value: 'completed', label: 'Completada', color: 'green' }] as const
-const materialStatuses = [{ value: 'to-summarize', label: 'Por resumir', color: 'violet' }, { value: 'summarized', label: 'Resumido', color: 'blue' }, { value: 'printed', label: 'Para imprimir', color: 'slate' }] as const
-const itemTypeLabels: Record<ItemType, string> = { task: 'Tarea', material: 'Material' }
-const itemStatusLabels: Record<ItemStatus, string> = { pending: 'Pendiente', completed: 'Completada', 'to-summarize': 'Para resumir', summarized: 'Resumido', printed: 'Impreso' }
+const practicalWorkStatuses = [{ value: 'pending', label: 'Pendientes', color: 'amber' }, { value: 'completed', label: 'Completados', color: 'green' }] as const
+const materialStatuses = [{ value: 'to-summarize', label: 'Por resumir', color: 'violet' }, { value: 'summarized', label: 'Resumido', color: 'blue' }, { value: 'printed', label: 'Impreso', color: 'slate' }] as const
+const itemTypeLabels: Record<ItemType, string> = {
+  task: 'Tarea',
+  'practical-work': 'Trabajo práctico',
+  material: 'Material',
+  exam: 'Examen',
+}
+const itemStatusLabels: Record<ItemStatus, string> = { pending: 'Pendiente', completed: 'Completada', 'to-summarize': 'Por resumir', summarized: 'Resumido', printed: 'Impreso' }
+const examTypeLabels: Record<ItemExamType, string> = { partial: 'Parcial', final: 'Final', recovery: 'Recuperatorio' }
 const typeBadgeClasses: Record<ItemType, string> = {
   task: 'border-[#365f91] bg-[#1d3555] text-[#91c2ff]',
   material: 'border-[#594278] bg-[#302447] text-[#c7a3ff]',
+  'practical-work': 'border-[#75612f] bg-[#3a301d] text-[#e9c66d]',
+  exam: 'border-[#7a3f55] bg-[#3b202d] text-[#f2a3bd]',
 }
 const statusDotClasses: Record<string, string> = {
   amber: 'bg-[#f0b54b] shadow-[0_0_9px_rgba(240,181,75,0.4)]',
@@ -43,13 +54,30 @@ const statusBadgeClasses: Record<ItemStatus, string> = {
   printed: 'border-[#286479] bg-[#163947] text-[#77d9f2]',
 }
 const studyItemDateFormatter = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
+const academicDateFormatter = new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })
 
-function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDown, onPointerMove, onPointerUp, onArchive, onRestore, onDelete }: { columns: readonly StatusColumn[]; items: StudyItem[]; itemType: ItemType; draggedItem: StudyItem | null; dropTarget: ItemStatus | null; onPointerDown: (event: PointerEvent<HTMLElement>, item: StudyItem) => void; onPointerMove: (event: PointerEvent<HTMLElement>) => void; onPointerUp: (event: PointerEvent<HTMLElement>) => void; onArchive?: (id: string) => void; onRestore?: (id: string) => void; onDelete: (item: StudyItem) => void }) {
+function getItemStatusLabel(item: StudyItem) {
+  return item.type === 'practical-work' && item.status === 'completed'
+    ? 'Completado'
+    : itemStatusLabels[item.status]
+}
+
+function formatAcademicDate(date: string) {
+  return academicDateFormatter.format(new Date(date + 'T00:00:00'))
+}
+
+function canArchiveManually(item: StudyItem) {
+  return item.type === 'task' || item.type === 'practical-work'
+    ? item.status === 'completed'
+    : item.type === 'material' && item.status === 'printed'
+}
+
+function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDown, onPointerMove, onPointerUp, onArchive, onRestore, onDelete, isDraggable = true, archivedView = false }: { columns: readonly StatusColumn[]; items: StudyItem[]; itemType: ItemType; draggedItem: StudyItem | null; dropTarget: ItemStatus | null; onPointerDown?: (event: PointerEvent<HTMLElement>, item: StudyItem) => void; onPointerMove?: (event: PointerEvent<HTMLElement>) => void; onPointerUp?: (event: PointerEvent<HTMLElement>) => void; onArchive?: (id: string) => void; onRestore?: (id: string) => void; onDelete: (item: StudyItem) => void; isDraggable?: boolean; archivedView?: boolean }) {
   return (
     <div className={columns.length === 3 ? 'grid gap-5 lg:grid-cols-3' : columns.length === 2 ? 'grid gap-5 md:grid-cols-2' : 'grid gap-5'}>
       {columns.map((column) => {
-        const columnItems = items.filter((item) => item.status === column.value)
-        const isDropTarget = dropTarget === column.value && draggedItem?.type === itemType
+        const columnItems = archivedView ? items : items.filter((item) => item.status === column.value)
+        const isDropTarget = isDraggable && dropTarget === column.value && draggedItem?.type === itemType
 
         return (
           <section
@@ -59,8 +87,8 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
                 ? '-translate-y-1 border-[#6785ff] bg-[#182544] ring-2 ring-[#6785ff]/30 shadow-[0_24px_60px_rgba(28,52,120,0.28)]'
                 : 'border-[#26354d] bg-[linear-gradient(180deg,rgba(20,30,48,0.96),rgba(13,21,35,0.98))] hover:border-[#344763]',
             ].join(' ')}
-            data-drop-status={column.value}
-            data-drop-type={itemType}
+            data-drop-status={isDraggable ? column.value : undefined}
+            data-drop-type={isDraggable ? itemType : undefined}
             key={column.value}
           >
             <div className="flex items-center gap-3 rounded-xl border border-[#2a3a54] bg-[#18243a]/90 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
@@ -75,22 +103,23 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
                   <span className="mb-3 flex size-10 items-center justify-center rounded-xl border border-[#2d3e59] bg-[#162238]">
                     <Inbox className="size-4.5" aria-hidden="true" />
                   </span>
-                  <strong className="text-[0.82rem] font-semibold">{isDropTarget ? 'Soltá el elemento aquí' : 'Sin elementos'}</strong>
-                  <span className="mt-1 text-[0.72rem] text-[#687790]">{isDropTarget ? 'Se guardará en esta columna.' : 'Arrastrá una tarjeta para moverla.'}</span>
+                  <strong className="text-[0.82rem] font-semibold">{isDropTarget ? 'Soltá el elemento aquí' : isDraggable ? 'Sin elementos' : 'Sin elementos archivados'}</strong>
+                  <span className="mt-1 text-[0.72rem] text-[#687790]">{isDropTarget ? 'Se guardará en esta columna.' : isDraggable ? 'Arrastrá una tarjeta para moverla.' : 'No hay elementos archivados en este estado.'}</span>
                 </div>
               ) : columnItems.map((item) => (
                 <Card
                   className={[
-                    'touch-none cursor-grab select-none gap-0 overflow-hidden rounded-xl border border-[#2b3b54] bg-[linear-gradient(145deg,#172338,#111a2a)] p-0 py-0 text-[#edf2fa] ring-0 shadow-[0_10px_28px_rgba(2,6,23,0.26)] transition-all duration-200 active:cursor-grabbing',
+                    'select-none gap-0 overflow-hidden rounded-xl border border-[#2b3b54] bg-[linear-gradient(145deg,#172338,#111a2a)] p-0 py-0 text-[#edf2fa] ring-0 shadow-[0_10px_28px_rgba(2,6,23,0.26)] transition-all duration-200',
+                    isDraggable ? 'touch-none cursor-grab active:cursor-grabbing' : '',
                     draggedItem?.id === item.id
                       ? 'scale-[0.97] cursor-grabbing border-[#7187d9] opacity-35'
                       : 'hover:-translate-y-0.5 hover:border-[#435b7c] hover:shadow-[0_16px_36px_rgba(2,6,23,0.38)]',
                   ].join(' ')}
                   key={item.id}
-                  onPointerDown={(event) => onPointerDown(event, item)}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                  onPointerCancel={onPointerUp}
+                  onPointerDown={isDraggable && onPointerDown ? (event) => onPointerDown(event, item) : undefined}
+                  onPointerMove={isDraggable ? onPointerMove : undefined}
+                  onPointerUp={isDraggable ? onPointerUp : undefined}
+                  onPointerCancel={isDraggable ? onPointerUp : undefined}
                 >
                   <div className="p-4 pb-3.5">
                     <div className="flex items-start justify-between gap-3">
@@ -102,24 +131,38 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
                         <Button className="size-7 rounded-lg border border-[#71303e] bg-[#351923] text-[#ff91a5] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] hover:border-[#a34255] hover:bg-[#57222f] hover:text-[#ffc0cb]" variant="destructive" size="icon-sm" type="button" aria-label={'Eliminar ' + item.title} title="Eliminar" onPointerDown={(event) => event.stopPropagation()} onClick={() => onDelete(item)}>
                           <Trash2 className="size-3.5" aria-hidden="true" />
                         </Button>
-                        <span className="flex size-8 items-center justify-center rounded-lg text-[#60718c]" title="Arrastrar">
-                          <GripVertical className="size-4" aria-hidden="true" />
-                        </span>
+                        {isDraggable && (
+                          <span className="flex size-8 items-center justify-center rounded-lg text-[#60718c]" title="Arrastrar">
+                            <GripVertical className="size-4" aria-hidden="true" />
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Badge className={['h-6 rounded-md px-2.5 text-[0.7rem] font-semibold', typeBadgeClasses[item.type]].join(' ')} variant="outline">{itemTypeLabels[item.type]}</Badge>
-                      <Badge className={['h-6 rounded-md px-2.5 text-[0.7rem] font-semibold', statusBadgeClasses[item.status]].join(' ')} variant="outline">{itemStatusLabels[item.status]}</Badge>
+                      {archivedView ? (
+                        <Badge className="h-6 rounded-md border-[#48566b] bg-[#252f3e] px-2.5 text-[0.7rem] font-semibold text-[#b8c2d1]" variant="outline">Archivado</Badge>
+                      ) : (
+                        <Badge className={['h-6 rounded-md px-2.5 text-[0.7rem] font-semibold', statusBadgeClasses[item.status]].join(' ')} variant="outline">{getItemStatusLabel(item)}</Badge>
+                      )}
                     </div>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#293851] bg-[#101a2a]/80 px-4 py-3">
-                    <time className="flex items-center gap-1.5 text-[0.7rem] text-[#8291a8]" dateTime={item.createdAt}>
-                      <CalendarDays className="size-3.5" aria-hidden="true" />
-                      {studyItemDateFormatter.format(new Date(item.createdAt))}
-                    </time>
-                    {item.type === 'material' && item.status === 'printed' && onArchive && (
+                    <div className="grid gap-1">
+                      {item.dueDate && (
+                        <time className="flex items-center gap-1.5 text-[0.7rem] font-semibold text-[#a9baff]" dateTime={item.dueDate}>
+                          <CalendarDays className="size-3.5" aria-hidden="true" />
+                          Vence {formatAcademicDate(item.dueDate)}
+                        </time>
+                      )}
+                      <time className="flex items-center gap-1.5 text-[0.68rem] text-[#8291a8]" dateTime={item.createdAt}>
+                        <Clock3 className="size-3.5" aria-hidden="true" />
+                        Creado {studyItemDateFormatter.format(new Date(item.createdAt))}
+                      </time>
+                    </div>
+                    {onArchive && canArchiveManually(item) && (
                       <Button className="h-7 gap-1.5 rounded-md border-[#3c4e6d] bg-[#1d2b43] px-2.5 text-[0.7rem] font-semibold text-[#c0cdf0] hover:bg-[#293a58] hover:text-white" variant="outline" size="sm" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onArchive(item.id)}>
                         <Archive className="size-3.5" aria-hidden="true" />
                         Archivar
@@ -128,7 +171,7 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
                     {onRestore && (
                       <Button className="h-7 gap-1.5 rounded-md border-[#3c4e6d] bg-[#1d2b43] px-2.5 text-[0.7rem] font-semibold text-[#c0cdf0] hover:bg-[#293a58] hover:text-white" variant="outline" size="sm" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onRestore(item.id)}>
                         <RotateCcw className="size-3.5" aria-hidden="true" />
-                        Mostrar últimos 30 días
+                        Restaurar
                       </Button>
                     )}
                   </div>
@@ -138,6 +181,44 @@ function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDow
           </section>
         )
       })}
+    </div>
+  )
+}
+
+function ModuleArchive({ title, emptyMessage, items, itemType, isOpen, onToggle, onRestore, onDelete }: { title: string; emptyMessage: string; items: StudyItem[]; itemType: ArchivableItemType; isOpen: boolean; onToggle: () => void; onRestore: (id: string) => void; onDelete: (item: StudyItem) => void }) {
+  return (
+    <div className="mt-6 border-t border-[#24344c] pt-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#293a54] bg-[#101b2c]/85 px-4 py-3.5">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-lg border border-[#3b4c67] bg-[#1c2940] text-[#9aabc4]">
+            <Archive className="size-4" aria-hidden="true" />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[0.88rem] font-semibold text-[#dce4ef]">{title}</h3>
+              <Badge className="h-6 min-w-6 rounded-full border-[#3b4c65] bg-[#22304a] px-2 text-[0.7rem] font-bold text-[#bdc8da]" variant="outline">{items.length}</Badge>
+            </div>
+            <p className="mt-1 text-[0.7rem] text-[#73839b]">Elementos archivados de este módulo.</p>
+          </div>
+        </div>
+        <Button className="h-9 gap-2 rounded-lg border-[#3b4d69] bg-[#1b2940] px-3 text-[0.74rem] font-semibold text-[#b5c2d5] hover:bg-[#263850] hover:text-white" variant="outline" type="button" onClick={onToggle}>
+          {isOpen ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+          {isOpen ? 'Ocultar archivo' : 'Abrir archivo'}
+        </Button>
+      </div>
+
+      {isOpen && (
+        <div className="mt-4">
+          {items.length === 0 ? (
+            <div className="flex min-h-28 flex-col items-center justify-center rounded-2xl border border-dashed border-[#2a3a52] bg-[#0b1421]/55 px-5 py-7 text-center text-[#74839a]">
+              <Archive className="mb-3 size-5" aria-hidden="true" />
+              <strong className="text-[0.82rem] font-semibold text-[#93a1b5]">{emptyMessage}</strong>
+            </div>
+          ) : (
+            <Board columns={archiveStatuses} items={items} itemType={itemType} draggedItem={null} dropTarget={null} onRestore={onRestore} onDelete={onDelete} isDraggable={false} archivedView />
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -152,7 +233,8 @@ function App() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [itemType, setItemType] = useState<ItemType>('task')
   const [itemStatus, setItemStatus] = useState<ItemStatus>('pending')
-  const [showArchived, setShowArchived] = useState(false)
+  const [itemExamType, setItemExamType] = useState<ItemExamType>('partial')
+  const [openArchives, setOpenArchives] = useState<Record<ArchivableItemType, boolean>>({ task: false, 'practical-work': false, material: false })
   const [itemToDelete, setItemToDelete] = useState<StudyItem | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [draggedItem, setDraggedItem] = useState<StudyItem | null>(null)
@@ -166,17 +248,92 @@ function App() {
   useEffect(() => { if (!authSession) return; const remainingLifetime = Date.parse(authSession.expiresAt) - Date.now(); if (remainingLifetime <= 0) { logout(); return }; const timeout = window.setTimeout(logout, Math.min(remainingLifetime, 2147483647)); return () => window.clearTimeout(timeout) }, [authSession])
   useLayoutEffect(() => { if (draggedItem && dragOverlayRef.current) { dragOverlayRef.current.style.left = `${dragPositionRef.current.x}px`; dragOverlayRef.current.style.top = `${dragPositionRef.current.y}px` } }, [draggedItem, dropTarget])
 
-  const tasks = items.filter((item) => item.type === 'task')
-  const materials = items.filter((item) => item.type === 'material')
-  const isArchived = (item: StudyItem) => item.archivedManually || (item.status === 'printed' && Boolean(item.printedAt) && Date.now() - new Date(item.printedAt!).getTime() >= archiveAfterDays * 86400000)
-  const archivedPrinted = materials.filter(isArchived); const activeMaterials = materials.filter((item) => !isArchived(item)); const pendingCount = tasks.filter((item) => item.status === 'pending').length; const toSummarizeCount = activeMaterials.filter((item) => item.status === 'to-summarize').length; const readyToPrintCount = activeMaterials.filter((item) => item.status === 'summarized').length; const availableStatuses = itemType === 'task' ? taskStatuses : materialStatuses
-  const updateRemote = async (id: string, changes: Partial<Pick<StudyItem, 'status' | 'printedAt' | 'archivedManually'>>) => { if (!authSession) return; const current = items.find((item) => item.id === id); if (!current) return; try { await updateStudyItem(id, { type: current.type, title: current.title, subject: current.subject, status: changes.status ?? current.status, printedAt: changes.printedAt !== undefined ? changes.printedAt : current.printedAt, archivedManually: changes.archivedManually ?? current.archivedManually }, authSession.token); await loadItems(authSession.token) } catch (apiError) { handleApiError(apiError, 'No se pudo guardar el cambio. Intentá otra vez.') } }
-  const updateStatus = async (id: string, status: ItemStatus) => { const current = items.find((item) => item.id === id); if (!current) return; await updateRemote(id, { status, printedAt: status === 'printed' ? current.status === 'printed' ? current.printedAt : new Date().toISOString() : null, archivedManually: false }) }
-  const archiveItem = async (id: string) => updateRemote(id, { archivedManually: true })
-  const restoreItem = async (id: string) => updateRemote(id, { archivedManually: false, printedAt: new Date().toISOString() })
+  const isArchived = (item: StudyItem) => item.isArchived || item.archivedManually
+  const taskItems = items.filter((item) => item.type === 'task')
+  const practicalWorkItems = items.filter((item) => item.type === 'practical-work')
+  const materialItems = items.filter((item) => item.type === 'material')
+  const tasks = taskItems.filter((item) => !isArchived(item))
+  const archivedTasks = taskItems.filter(isArchived)
+  const practicalWorks = practicalWorkItems.filter((item) => !isArchived(item))
+  const archivedPracticalWorks = practicalWorkItems.filter(isArchived)
+  const activeMaterials = materialItems.filter((item) => !isArchived(item))
+  const archivedMaterials = materialItems.filter(isArchived)
+  const pendingCount = [...tasks, ...practicalWorks].filter((item) => item.status === 'pending').length
+  const toSummarizeCount = activeMaterials.filter((item) => item.status === 'to-summarize').length
+  const printedCount = activeMaterials.filter((item) => item.status === 'printed').length
+  const availableStatuses = itemType === 'material' ? materialStatuses : taskStatuses
+
+  const updateRemote = async (
+    id: string,
+    changes: Partial<Pick<StudyItem, 'status' | 'isArchived'>>,
+  ) => {
+    if (!authSession) return
+    const current = items.find((item) => item.id === id)
+    if (!current) return
+
+    try {
+      await updateStudyItem(id, {
+        type: current.type,
+        title: current.title,
+        subject: current.subject,
+        status: changes.status ?? current.status,
+        dueDate: current.dueDate,
+        examType: current.examType,
+        examInstance: current.examInstance,
+        isArchived: changes.isArchived ?? current.isArchived,
+      }, authSession.token)
+      await loadItems(authSession.token)
+    } catch (apiError) {
+      handleApiError(apiError, 'No se pudo guardar el cambio. Intentá otra vez.')
+    }
+  }
+
+  const updateStatus = async (id: string, status: ItemStatus) => {
+    await updateRemote(id, { status, isArchived: false })
+  }
+
+  const archiveItem = async (id: string) => updateRemote(id, { isArchived: true })
+  const restoreItem = async (id: string) => updateRemote(id, { isArchived: false })
+  const toggleArchive = (type: ArchivableItemType) => setOpenArchives((current) => ({ ...current, [type]: !current[type] }))
+
   const deleteItem = async () => { if (!itemToDelete || !authSession) return; try { await deleteStudyItem(itemToDelete.id, authSession.token); setItems((current) => current.filter((item) => item.id !== itemToDelete.id)); setItemToDelete(null) } catch (apiError) { handleApiError(apiError, 'No se pudo eliminar el elemento.') } }
-  function changeItemType(type: ItemType) { setItemType(type); setItemStatus(type === 'task' ? 'pending' : 'to-summarize') }
-  async function createItem(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!authSession) return; const form = new FormData(event.currentTarget); const title = String(form.get('title') ?? '').trim(); const subject = String(form.get('subject') ?? '').trim(); if (!title || !subject) return; try { await createStudyItem({ type: itemType, title, subject, status: itemStatus, printedAt: itemStatus === 'printed' ? new Date().toISOString() : null }, authSession.token); setIsFormOpen(false); await loadItems(authSession.token) } catch (apiError) { handleApiError(apiError, 'No se pudo crear el elemento.') } }
+
+  function changeItemType(type: ItemType) {
+    setItemType(type)
+    setItemStatus(type === 'material' ? 'to-summarize' : 'pending')
+    if (type === 'exam') setItemExamType('partial')
+  }
+
+  async function createItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!authSession) return
+
+    const form = new FormData(event.currentTarget)
+    const title = String(form.get('title') ?? '').trim()
+    const subject = String(form.get('subject') ?? '').trim()
+    const dueDateValue = String(form.get('dueDate') ?? '').trim()
+    const examInstanceValue = String(form.get('examInstance') ?? '').trim()
+    const isExam = itemType === 'exam'
+
+    if (!subject || (!isExam && !title) || (isExam && !dueDateValue)) return
+
+    try {
+      await createStudyItem({
+        type: itemType,
+        title: isExam ? null : title,
+        subject,
+        status: itemType === 'material' ? itemStatus : 'pending',
+        dueDate: itemType === 'material' ? null : dueDateValue || null,
+        examType: isExam ? itemExamType : null,
+        examInstance: isExam ? examInstanceValue || null : null,
+      }, authSession.token)
+      setIsFormOpen(false)
+      await loadItems(authSession.token)
+    } catch (apiError) {
+      handleApiError(apiError, 'No se pudo crear el elemento.')
+    }
+  }
+
   async function submitAuth(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); const email = String(form.get('email') ?? '').trim(); const password = String(form.get('password') ?? ''); setAuthMessage(null); try { if (isRegistering) { const response = await register({ email, password }); setAuthMessage({ text: response.message, type: 'success' }); return } const response = await login({ email, password }); const nextSession = persistAuthSession(response, email); setAuthSession(nextSession); void loadItems(nextSession.token) } catch (authError) { const message = authError instanceof ApiError || authError instanceof Error ? authError.message : 'No se pudo completar la autenticación.'; setAuthMessage({ text: message, type: 'error' }) } }
   function logout() { clearAuthSession(); setAuthSession(null); setItems([]); setError(''); setShowSettings(false); setIsFormOpen(false); setItemToDelete(null); setDraggedItem(null); setDropTarget(null) }
   const updatePreview = (x: number, y: number) => { dragPositionRef.current = { x, y }; if (dragOverlayRef.current) { dragOverlayRef.current.style.left = `${x}px`; dragOverlayRef.current.style.top = `${y}px` } }
@@ -234,12 +391,13 @@ function App() {
 
   const studyItemDialog = (
     <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-      <DialogContent className="max-w-[470px] gap-0 rounded-2xl border border-[#34405a] bg-[#191f2b] p-7 text-[#edf0f7] shadow-[0_24px_80px_rgba(0,0,0,0.5)] ring-0 sm:max-w-[470px]">
+      <DialogContent className="max-h-[90vh] max-w-[520px] gap-0 overflow-y-auto rounded-2xl border border-[#34405a] bg-[#191f2b] p-7 text-[#edf0f7] shadow-[0_24px_80px_rgba(0,0,0,0.5)] ring-0 sm:max-w-[520px]">
         <DialogHeader className="gap-0">
           <p className="mb-2 text-[0.72rem] font-[750] tracking-[0.1em] text-[#aebaff]">NUEVO ELEMENTO</p>
           <DialogTitle className="text-[1.35rem] leading-tight font-bold tracking-[-0.04em]">¿Qué querés agregar?</DialogTitle>
           <DialogDescription className="sr-only">Completá los datos para crear un nuevo elemento de estudio.</DialogDescription>
         </DialogHeader>
+
         <form className="mt-6 grid gap-[17px]" onSubmit={createItem}>
           <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-type">
             Tipo de elemento
@@ -249,29 +407,69 @@ function App() {
               </SelectTrigger>
               <SelectContent className="border border-[#46536b] bg-[#252d3c] text-[#d8dfeb] ring-0">
                 <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="task">{itemTypeLabels.task}</SelectItem>
+                <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="practical-work">{itemTypeLabels['practical-work']}</SelectItem>
                 <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="material">{itemTypeLabels.material}</SelectItem>
+                <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="exam">{itemTypeLabels.exam}</SelectItem>
               </SelectContent>
             </Select>
           </Label>
-          <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-status">
-            Estado
-            <Select items={itemStatusLabels} value={itemStatus} onValueChange={(value) => setItemStatus(value as ItemStatus)}>
-              <SelectTrigger className="!h-[42px] w-full !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border border-[#46536b] bg-[#252d3c] text-[#d8dfeb] ring-0">
-                {availableStatuses.map((status) => <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" key={status.value} value={status.value}>{itemStatusLabels[status.value]}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </Label>
-          <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-title">
-            Título
-            <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-title" name="title" required autoFocus />
-          </Label>
+
+          {itemType !== 'exam' && (
+            <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-title">
+              Título
+              <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-title" name="title" required autoFocus />
+            </Label>
+          )}
+
           <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-subject">
             Materia
-            <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-subject" name="subject" required />
+            <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-subject" name="subject" required autoFocus={itemType === 'exam'} />
           </Label>
+
+          {itemType === 'material' && (
+            <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-status">
+              Estado
+              <Select items={itemStatusLabels} value={itemStatus} onValueChange={(value) => setItemStatus(value as ItemStatus)}>
+                <SelectTrigger className="!h-[42px] w-full !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border border-[#46536b] bg-[#252d3c] text-[#d8dfeb] ring-0">
+                  {availableStatuses.map((status) => <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" key={status.value} value={status.value}>{itemStatusLabels[status.value]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </Label>
+          )}
+
+          {itemType === 'exam' && (
+            <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-exam-type">
+              Tipo de examen
+              <Select items={examTypeLabels} value={itemExamType} onValueChange={(value) => setItemExamType(value as ItemExamType)}>
+                <SelectTrigger className="!h-[42px] w-full !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-exam-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border border-[#46536b] bg-[#252d3c] text-[#d8dfeb] ring-0">
+                  <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="partial">{examTypeLabels.partial}</SelectItem>
+                  <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="final">{examTypeLabels.final}</SelectItem>
+                  <SelectItem className="focus:bg-[#35425a] focus:text-[#edf0f7]" value="recovery">{examTypeLabels.recovery}</SelectItem>
+                </SelectContent>
+              </Select>
+            </Label>
+          )}
+
+          {(itemType === 'task' || itemType === 'practical-work' || itemType === 'exam') && (
+            <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-due-date">
+              {itemType === 'exam' ? 'Fecha' : 'Fecha (opcional)'}
+              <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] [color-scheme:dark] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-due-date" name="dueDate" type="date" required={itemType === 'exam'} />
+            </Label>
+          )}
+
+          {itemType === 'exam' && (
+            <Label className="grid gap-[7px] text-[0.84rem] font-bold text-[#c9d2df]" htmlFor="study-item-exam-instance">
+              Instancia / detalle (opcional)
+              <Input className="!h-[42px] !rounded-[7px] !border-[#354155] !bg-[#111722] !px-3 !py-[11px] !text-[#edf0f7] placeholder:!text-[#68758a] focus-visible:!border-[#8292ff] focus-visible:!ring-[3px] focus-visible:!ring-[rgba(119,137,255,0.16)]" id="study-item-exam-instance" name="examInstance" placeholder="Ej.: Parcial 1" maxLength={100} />
+            </Label>
+          )}
+
           <DialogFooter className="mx-0 -mb-0 mt-[5px] flex-row justify-end gap-2.5 border-0 bg-transparent p-0">
             <Button className="h-auto px-1.5 py-1.5 text-[#9facff] hover:bg-transparent hover:text-[#d5daff]" variant="ghost" type="button" onClick={() => setIsFormOpen(false)}>Cancelar</Button>
             <Button className="h-auto bg-[#7789ff] px-4 py-[11px] font-bold text-[#101429] shadow-[0_8px_20px_rgba(119,137,255,0.23)] hover:bg-[#a3afff]" type="submit">Crear elemento</Button>
@@ -328,7 +526,7 @@ function App() {
             </span>
             <p className="text-[0.68rem] font-bold tracking-[0.14em] text-[#7f94bb] uppercase">Vista general</p>
             <h2 className="mt-2 text-[clamp(1.7rem,3vw,2.25rem)] font-bold tracking-[-0.055em] text-[#f4f7fb]">Tu tablero de estudio</h2>
-            <p className="mt-3 max-w-md text-[0.88rem] leading-6 text-[#91a0b8]">Organizá tus pendientes y materiales en un flujo claro. Arrastrá cada tarjeta para avanzar al siguiente estado.</p>
+            <p className="mt-3 max-w-md text-[0.88rem] leading-6 text-[#91a0b8]">Organizá tus tareas, trabajos prácticos y materiales en un flujo claro. Arrastrá cada tarjeta para avanzar al siguiente estado.</p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -351,10 +549,10 @@ function App() {
             <Card className="gap-0 rounded-2xl border border-[#314e65] bg-[#172530]/85 p-4 py-4 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.2)]">
               <div className="flex items-start justify-between gap-3">
                 <span className="flex size-9 items-center justify-center rounded-xl border border-[#3b5d76] bg-[#1c3140] text-[#7ec5ed]"><Printer className="size-4" aria-hidden="true" /></span>
-                <strong className="text-3xl font-bold tracking-[-0.05em] text-[#81c7ed]">{readyToPrintCount}</strong>
+                <strong className="text-3xl font-bold tracking-[-0.05em] text-[#81c7ed]">{printedCount}</strong>
               </div>
-              <span className="mt-5 text-[0.76rem] font-semibold text-[#a8bfce]">Para imprimir</span>
-              <span className="mt-1 text-[0.68rem] text-[#6f818d]">Resúmenes listos</span>
+              <span className="mt-5 text-[0.76rem] font-semibold text-[#a8bfce]">Impresos</span>
+              <span className="mt-1 text-[0.68rem] text-[#6f818d]">Materiales impresos</span>
             </Card>
           </div>
         </div>
@@ -373,7 +571,25 @@ function App() {
           </div>
           <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
         </div>
-        <Board columns={taskStatuses} items={tasks} itemType="task" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onDelete={setItemToDelete} />
+        <Board columns={taskStatuses} items={tasks} itemType="task" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+        <ModuleArchive title="Archivo de tareas" emptyMessage="Todavía no hay tareas archivadas" items={archivedTasks} itemType="task" isOpen={openArchives.task} onToggle={() => toggleArchive('task')} onRestore={restoreItem} onDelete={setItemToDelete} />
+      </section>
+
+      <section className="mt-7 rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-6">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4 px-1">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 items-center justify-center rounded-xl border border-[#5d4d2d] bg-[#2d271b] text-[#e4bd62]">
+              <ClipboardCheck className="size-4.5" aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-[0.66rem] font-bold tracking-[0.13em] text-[#7788a3] uppercase">Entregas</p>
+              <h2 className="mt-1 text-[1.35rem] font-bold tracking-[-0.04em] text-[#edf2f8]">Trabajos prácticos</h2>
+            </div>
+          </div>
+          <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
+        </div>
+        <Board columns={practicalWorkStatuses} items={practicalWorks} itemType="practical-work" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+        <ModuleArchive title="Archivo de trabajos prácticos" emptyMessage="Todavía no hay trabajos prácticos archivados" items={archivedPracticalWorks} itemType="practical-work" isOpen={openArchives['practical-work']} onToggle={() => toggleArchive('practical-work')} onRestore={restoreItem} onDelete={setItemToDelete} />
       </section>
 
       <section className="mt-7 rounded-[26px] border border-[#202e44] bg-[#0d1625]/88 p-4 shadow-[0_22px_60px_rgba(2,6,23,0.22)] sm:p-6">
@@ -390,47 +606,8 @@ function App() {
           <Badge className="h-7 rounded-lg border-[#30425f] bg-[#152238] px-3 text-[0.7rem] font-medium text-[#8798b4]" variant="outline">Arrastrá para cambiar el estado</Badge>
         </div>
         <Board columns={materialStatuses} items={activeMaterials} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+        <ModuleArchive title="Archivo de materiales" emptyMessage="Todavía no hay materiales archivados" items={archivedMaterials} itemType="material" isOpen={openArchives.material} onToggle={() => toggleArchive('material')} onRestore={restoreItem} onDelete={setItemToDelete} />
       </section>
-
-      <section className="mt-7 overflow-hidden rounded-[26px] border border-[#26364e] bg-[linear-gradient(145deg,#111c2d,#0c1523)] shadow-[0_22px_60px_rgba(2,6,23,0.24)]">
-        <div className="flex flex-col items-start justify-between gap-5 border-b border-[#26364d] bg-[#142035]/75 p-5 sm:flex-row sm:items-center sm:p-6">
-          <div className="flex items-start gap-3.5">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#3b4c67] bg-[#1c2940] text-[#9aabc4]">
-              <Archive className="size-4.5" aria-hidden="true" />
-            </span>
-            <div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h2 className="text-[1.35rem] font-bold tracking-[-0.04em] text-[#edf2f8]">Archivados</h2>
-                <Badge className="h-6 min-w-6 rounded-full border-[#3b4c65] bg-[#22304a] px-2 text-[0.7rem] font-bold text-[#bdc8da]" variant="outline">{archivedPrinted.length}</Badge>
-              </div>
-              <p className="mt-2 max-w-2xl text-[0.77rem] leading-relaxed text-[#7888a1]">Los materiales impresos se archivan después de {archiveAfterDays} días o manualmente cuando lo decidas.</p>
-            </div>
-          </div>
-          {archivedPrinted.length > 0 && (
-            <Button className="h-9 gap-2 rounded-lg border-[#3b4d69] bg-[#1b2940] px-3 text-[0.74rem] font-semibold text-[#b5c2d5] hover:bg-[#263850] hover:text-white" variant="outline" type="button" onClick={() => setShowArchived((current) => !current)}>
-              {showArchived ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-              {showArchived ? 'Ocultar archivados' : 'Mostrar archivados'}
-            </Button>
-          )}
-        </div>
-        <div className="p-4 sm:p-6">
-          {archivedPrinted.length === 0 ? (
-            <div className="flex min-h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-[#2a3a52] bg-[#0b1421]/55 px-5 py-8 text-center text-[#74839a]">
-              <Archive className="mb-3 size-5" aria-hidden="true" />
-              <strong className="text-[0.82rem] font-semibold text-[#93a1b5]">Todavía no hay elementos archivados</strong>
-              <span className="mt-1 text-[0.72rem]">Cuando archives un material, aparecerá en esta sección.</span>
-            </div>
-          ) : showArchived ? (
-            <Board columns={[{ value: 'printed', label: 'Archivados', color: 'slate' }]} items={archivedPrinted} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onRestore={restoreItem} onDelete={setItemToDelete} />
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#293a54] bg-[#0d1727] px-4 py-4">
-              <p className="text-[0.78rem] text-[#8493a9]">Hay {archivedPrinted.length} elementos archivados disponibles.</p>
-              <span className="text-[0.7rem] text-[#60718a]">Usá “Mostrar archivados” para revisarlos.</span>
-            </div>
-          )}
-        </div>
-      </section>
-
       {draggedItem && createPortal(
         <div className="pointer-events-none fixed z-30 min-w-[240px] -translate-x-1/2 -translate-y-1/2 scale-[1.03] rounded-xl border border-[#7891ed] bg-[linear-gradient(145deg,#233453,#16253c)] px-4 py-3.5 text-[#f0f5fc] shadow-[0_24px_60px_rgba(2,6,23,0.58),0_0_0_1px_rgba(132,154,239,0.18)]" ref={dragOverlayRef}>
           <p className="mb-1.5 text-[0.66rem] font-bold tracking-[0.11em] text-[#aebeff] uppercase">{draggedItem.subject}</p>
