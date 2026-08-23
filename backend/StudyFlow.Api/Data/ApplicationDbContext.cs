@@ -24,10 +24,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             {
                 table.HasCheckConstraint(
                     "ck_study_items_type",
-                    "type IN ('task', 'material')");
+                    "type IN ('task', 'material', 'practical-work', 'exam')");
                 table.HasCheckConstraint(
                     "ck_study_items_status",
                     "status IN ('pending', 'completed', 'to-summarize', 'summarized', 'printed')");
+                table.HasCheckConstraint(
+                    "ck_study_items_exam_type",
+                    "exam_type IS NULL OR exam_type IN ('partial', 'final', 'recovery')");
             });
 
             entity.HasKey(item => item.Id);
@@ -59,14 +62,30 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasColumnName("status")
                 .IsRequired();
 
+            entity.Property(item => item.DueDate)
+                .HasColumnName("due_date")
+                .HasColumnType("date");
+
+            entity.Property(item => item.ExamType)
+                .HasColumnName("exam_type")
+                .HasMaxLength(20);
+
+            entity.Property(item => item.ExamInstance)
+                .HasColumnName("exam_instance")
+                .HasMaxLength(100);
+
             entity.Property(item => item.PrintedAt)
                 .HasColumnName("printed_at")
                 .HasColumnType("timestamp with time zone");
 
-            entity.Property(item => item.ArchivedManually)
-                .HasColumnName("archived_manually")
+            entity.Property(item => item.IsArchived)
+                .HasColumnName("is_archived")
                 .HasDefaultValue(false)
                 .IsRequired();
+
+            entity.Property(item => item.ArchivedAt)
+                .HasColumnName("archived_at")
+                .HasColumnType("timestamp with time zone");
 
             entity.Property(item => item.CreatedAt)
                 .HasColumnName("created_at")
@@ -88,6 +107,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(item => new { item.UserId, item.CreatedAt })
                 .IsDescending(false, true)
                 .HasDatabaseName("study_items_user_id_created_at_idx");
+
+            entity.HasIndex(item => new { item.UserId, item.IsArchived, item.Type, item.DueDate })
+                .HasDatabaseName("study_items_user_id_is_archived_type_due_date_idx");
         });
     }
 }

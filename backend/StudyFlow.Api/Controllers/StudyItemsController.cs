@@ -35,7 +35,7 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
                 Subject = item.Subject,
                 Status = item.Status,
                 PrintedAt = item.PrintedAt,
-                ArchivedManually = item.ArchivedManually,
+                ArchivedManually = item.IsArchived,
                 CreatedAt = item.CreatedAt,
                 UpdatedAt = item.UpdatedAt,
             })
@@ -64,7 +64,7 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
                 Subject = item.Subject,
                 Status = item.Status,
                 PrintedAt = item.PrintedAt,
-                ArchivedManually = item.ArchivedManually,
+                ArchivedManually = item.IsArchived,
                 CreatedAt = item.CreatedAt,
                 UpdatedAt = item.UpdatedAt,
             })
@@ -91,7 +91,7 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
             Subject = request.Subject,
             Status = request.Status,
             PrintedAt = request.PrintedAt,
-            ArchivedManually = false,
+            IsArchived = false,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -124,7 +124,7 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
         item.Subject = request.Subject;
         item.Status = request.Status;
         item.PrintedAt = request.PrintedAt;
-        item.ArchivedManually = request.ArchivedManually;
+        item.IsArchived = request.ArchivedManually;
         item.UpdatedAt = DateTimeOffset.UtcNow;
 
         await dbContext.SaveChangesAsync();
@@ -173,7 +173,7 @@ public sealed class StudyItemsController(ApplicationDbContext dbContext) : Contr
             Subject = item.Subject,
             Status = item.Status,
             PrintedAt = item.PrintedAt,
-            ArchivedManually = item.ArchivedManually,
+            ArchivedManually = item.IsArchived,
             CreatedAt = item.CreatedAt,
             UpdatedAt = item.UpdatedAt,
         };

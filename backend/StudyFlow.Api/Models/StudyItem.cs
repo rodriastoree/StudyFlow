@@ -14,9 +14,17 @@ public class StudyItem
 
     public string Status { get; set; } = string.Empty;
 
+    public DateOnly? DueDate { get; set; }
+
+    public string? ExamType { get; set; }
+
+    public string? ExamInstance { get; set; }
+
     public DateTimeOffset? PrintedAt { get; set; }
 
-    public bool ArchivedManually { get; set; }
+    public bool IsArchived { get; set; }
+
+    public DateTimeOffset? ArchivedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 
