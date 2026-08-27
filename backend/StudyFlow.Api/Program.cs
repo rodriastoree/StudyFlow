@@ -7,6 +7,7 @@ using StudyFlow.Api.Data;
 using StudyFlow.Api.Models;
 using StudyFlow.Api.Options;
 using StudyFlow.Api.Services;
+using StudyFlow.Api.Services.Automation;
 
 var builder = WebApplication.CreateBuilder(args);
 const string frontendDevelopmentCors = "FrontendDevelopment";
@@ -56,6 +57,27 @@ if (string.IsNullOrWhiteSpace(jwtOptions.Key)
 
 builder.Services.Configure<JwtOptions>(jwtSection);
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+var automationSection = builder.Configuration.GetRequiredSection(
+    StudyItemAutomationOptions.SectionName);
+builder.Services
+    .AddOptions<StudyItemAutomationOptions>()
+    .Bind(automationSection)
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.AcademicTimeZoneId),
+        "An academic time zone is required.")
+    .Validate(
+        options => TimeZoneInfo.TryFindSystemTimeZoneById(
+            options.AcademicTimeZoneId,
+            out _),
+        "The configured academic time zone is not available.")
+    .Validate(
+        options => options.IntervalHours > 0,
+        "The StudyItem automation interval must be greater than zero hours.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IAcademicClock, AcademicClock>();
+builder.Services.AddScoped<IStudyItemAutomationProcessor, StudyItemAutomationProcessor>();
+builder.Services.AddHostedService<StudyItemAutomationBackgroundService>();
 builder.Services
     .AddAuthentication(options =>
     {
