@@ -1,12 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { FormEvent, PointerEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Archive, BookOpen, CalendarDays, ClipboardCheck, Clock3, GripVertical, Inbox, LayoutDashboard, LogOut, Plus, Printer, RotateCcw, Settings, Trash2, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { CalendarSection } from '@/components/calendar/CalendarSection'
 import { ExamsSection } from '@/components/exams/ExamsSection'
+import { DraggableStudyItem, DroppableStudyItemStatus, StudyItemsDndContext } from '@/components/study-items/StudyItemsDnd'
+import type { DraggableStudyItemRenderState, DroppableStudyItemRenderState } from '@/components/study-items/StudyItemsDnd'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,7 +16,7 @@ import { clearAuthSession, persistAuthSession, restoreAuthSession } from './lib/
 import type { AuthSession } from './lib/auth/authStorage'
 import { ApiError } from './lib/api/httpClient'
 import { login, register } from './services/authService'
-import { createStudyItem, deleteStudyItem, getStudyItems, updateStudyItem } from './services/studyItemsService'
+import { useStudyItemsStore } from './stores/studyItemsStore'
 import type { StudyItem, StudyItemExamType as ItemExamType, StudyItemStatus as ItemStatus, StudyItemType as ItemType } from './types/api/studyItems'
 import './App.css'
 
@@ -74,119 +75,152 @@ function canArchiveManually(item: StudyItem) {
     : item.type === 'material' && item.status === 'printed'
 }
 
-function Board({ columns, items, itemType, draggedItem, dropTarget, onPointerDown, onPointerMove, onPointerUp, onArchive, onRestore, onDelete, isDraggable = true, archivedView = false }: { columns: readonly StatusColumn[]; items: StudyItem[]; itemType: ItemType; draggedItem: StudyItem | null; dropTarget: ItemStatus | null; onPointerDown?: (event: PointerEvent<HTMLElement>, item: StudyItem) => void; onPointerMove?: (event: PointerEvent<HTMLElement>) => void; onPointerUp?: (event: PointerEvent<HTMLElement>) => void; onArchive?: (id: string) => void; onRestore?: (id: string) => void; onDelete: (item: StudyItem) => void; isDraggable?: boolean; archivedView?: boolean }) {
-  return (
+function Board({ columns, items, itemType, onStatusChange, onArchive, onRestore, onDelete, isDraggable = true, archivedView = false }: { columns: readonly StatusColumn[]; items: StudyItem[]; itemType: ItemType; onStatusChange?: (id: string, status: ItemStatus) => void | Promise<void>; onArchive?: (id: string) => void; onRestore?: (id: string) => void; onDelete: (item: StudyItem) => void; isDraggable?: boolean; archivedView?: boolean }) {
+  const allowedStatuses = columns
+    .map((column) => column.value)
+    .filter((status): status is ItemStatus => status !== 'archived')
+
+  const renderBoard = (activeItem: StudyItem | null) => (
     <div className={columns.length === 3 ? 'grid gap-5 lg:grid-cols-3' : columns.length === 2 ? 'grid gap-5 md:grid-cols-2' : 'grid gap-5'}>
       {columns.map((column) => {
         const columnItems = archivedView ? items : items.filter((item) => item.status === column.value)
-        const isDropTarget = isDraggable && dropTarget === column.value && draggedItem?.type === itemType
+        const renderColumn = (dropState?: DroppableStudyItemRenderState) => {
+          const isDropTarget = dropState?.isOver ?? false
 
-        return (
-          <section
-            className={[
-              'relative min-h-[280px] overflow-hidden rounded-2xl border p-3 shadow-[0_18px_45px_rgba(2,6,23,0.18)] transition-all duration-200',
-              isDropTarget
-                ? '-translate-y-1 border-[#6785ff] bg-[#182544] ring-2 ring-[#6785ff]/30 shadow-[0_24px_60px_rgba(28,52,120,0.28)]'
-                : 'border-[#26354d] bg-[linear-gradient(180deg,rgba(20,30,48,0.96),rgba(13,21,35,0.98))] hover:border-[#344763]',
-            ].join(' ')}
-            data-drop-status={isDraggable ? column.value : undefined}
-            data-drop-type={isDraggable ? itemType : undefined}
-            key={column.value}
-          >
-            <div className="flex items-center gap-3 rounded-xl border border-[#2a3a54] bg-[#18243a]/90 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
-              <span className={['size-2.5 shrink-0 rounded-full', statusDotClasses[column.color] ?? statusDotClasses.slate].join(' ')} />
-              <h3 className="flex-1 text-[0.9rem] font-semibold tracking-[-0.01em] text-[#e4eaf4]">{column.label}</h3>
-              <Badge className="h-6 min-w-6 rounded-full border border-[#3b4b65] bg-[#22304a] px-2 text-[0.72rem] font-bold text-[#c4cee0]" variant="outline">{columnItems.length}</Badge>
-            </div>
+          return (
+            <section
+              ref={dropState?.setNodeRef}
+              className={[
+                'relative min-h-[280px] overflow-hidden rounded-2xl border p-3 shadow-[0_18px_45px_rgba(2,6,23,0.18)] transition-all duration-200',
+                isDropTarget
+                  ? '-translate-y-1 border-[#6785ff] bg-[#182544] ring-2 ring-[#6785ff]/30 shadow-[0_24px_60px_rgba(28,52,120,0.28)]'
+                  : 'border-[#26354d] bg-[linear-gradient(180deg,rgba(20,30,48,0.96),rgba(13,21,35,0.98))] hover:border-[#344763]',
+              ].join(' ')}
+              key={column.value}
+            >
+              <div className="flex items-center gap-3 rounded-xl border border-[#2a3a54] bg-[#18243a]/90 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
+                <span className={['size-2.5 shrink-0 rounded-full', statusDotClasses[column.color] ?? statusDotClasses.slate].join(' ')} />
+                <h3 className="flex-1 text-[0.9rem] font-semibold tracking-[-0.01em] text-[#e4eaf4]">{column.label}</h3>
+                <Badge className="h-6 min-w-6 rounded-full border border-[#3b4b65] bg-[#22304a] px-2 text-[0.72rem] font-bold text-[#c4cee0]" variant="outline">{columnItems.length}</Badge>
+              </div>
 
-            <div className="mt-3 grid min-h-[198px] content-start gap-3 rounded-xl border border-dashed border-[#273750] bg-[#0b1423]/55 p-2.5">
-              {columnItems.length === 0 ? (
-                <div className={['flex min-h-[160px] flex-col items-center justify-center rounded-lg border px-5 text-center transition-colors', isDropTarget ? 'border-[#6580ee]/70 bg-[#1b2a50]/80 text-[#d2dcff]' : 'border-transparent text-[#71809a]'].join(' ')}>
-                  <span className="mb-3 flex size-10 items-center justify-center rounded-xl border border-[#2d3e59] bg-[#162238]">
-                    <Inbox className="size-4.5" aria-hidden="true" />
-                  </span>
-                  <strong className="text-[0.82rem] font-semibold">{isDropTarget ? 'Soltá el elemento aquí' : isDraggable ? 'Sin elementos' : 'Sin elementos archivados'}</strong>
-                  <span className="mt-1 text-[0.72rem] text-[#687790]">{isDropTarget ? 'Se guardará en esta columna.' : isDraggable ? 'Arrastrá una tarjeta para moverla.' : 'No hay elementos archivados en este estado.'}</span>
-                </div>
-              ) : columnItems.map((item) => (
-                <Card
-                  className={[
-                    'select-none gap-0 overflow-hidden rounded-xl border border-[#2b3b54] bg-[linear-gradient(145deg,#172338,#111a2a)] p-0 py-0 text-[#edf2fa] ring-0 shadow-[0_10px_28px_rgba(2,6,23,0.26)] transition-all duration-200',
-                    isDraggable ? 'touch-none cursor-grab active:cursor-grabbing' : '',
-                    draggedItem?.id === item.id
-                      ? 'scale-[0.97] cursor-grabbing border-[#7187d9] opacity-35'
-                      : 'hover:-translate-y-0.5 hover:border-[#435b7c] hover:shadow-[0_16px_36px_rgba(2,6,23,0.38)]',
-                  ].join(' ')}
-                  key={item.id}
-                  onPointerDown={isDraggable && onPointerDown ? (event) => onPointerDown(event, item) : undefined}
-                  onPointerMove={isDraggable ? onPointerMove : undefined}
-                  onPointerUp={isDraggable ? onPointerUp : undefined}
-                  onPointerCancel={isDraggable ? onPointerUp : undefined}
-                >
-                  <div className="p-4 pb-3.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-[0.67rem] font-bold tracking-[0.11em] text-[#8fa5cd] uppercase">{item.subject}</p>
-                        <h4 className="mt-2 text-[0.98rem] leading-snug font-semibold tracking-[-0.02em] text-[#f2f5fa]">{item.title}</h4>
+              <div className="mt-3 grid min-h-[198px] content-start gap-3 rounded-xl border border-dashed border-[#273750] bg-[#0b1423]/55 p-2.5">
+                {columnItems.length === 0 ? (
+                  <div className={['flex min-h-[160px] flex-col items-center justify-center rounded-lg border px-5 text-center transition-colors', isDropTarget ? 'border-[#6580ee]/70 bg-[#1b2a50]/80 text-[#d2dcff]' : 'border-transparent text-[#71809a]'].join(' ')}>
+                    <span className="mb-3 flex size-10 items-center justify-center rounded-xl border border-[#2d3e59] bg-[#162238]">
+                      <Inbox className="size-4.5" aria-hidden="true" />
+                    </span>
+                    <strong className="text-[0.82rem] font-semibold">{isDropTarget ? 'Soltá el elemento aquí' : isDraggable ? 'Sin elementos' : 'Sin elementos archivados'}</strong>
+                    <span className="mt-1 text-[0.72rem] text-[#687790]">{isDropTarget ? 'Se guardará en esta columna.' : isDraggable ? 'Arrastrá una tarjeta para moverla.' : 'No hay elementos archivados en este estado.'}</span>
+                  </div>
+                ) : columnItems.map((item) => {
+                  const renderCard = (dragState?: DraggableStudyItemRenderState) => (
+                    <Card
+                      ref={dragState?.setNodeRef}
+                      {...dragState?.attributes}
+                      {...dragState?.listeners}
+                      className={[
+                        'select-none gap-0 overflow-hidden rounded-xl border border-[#2b3b54] bg-[linear-gradient(145deg,#172338,#111a2a)] p-0 py-0 text-[#edf2fa] ring-0 shadow-[0_10px_28px_rgba(2,6,23,0.26)] transition-all duration-200',
+                        isDraggable ? 'touch-none cursor-grab active:cursor-grabbing' : '',
+                        dragState?.isDragging || activeItem?.id === item.id
+                          ? 'scale-[0.97] cursor-grabbing border-[#7187d9] opacity-35'
+                          : 'hover:-translate-y-0.5 hover:border-[#435b7c] hover:shadow-[0_16px_36px_rgba(2,6,23,0.38)]',
+                      ].join(' ')}
+                      key={item.id}
+                    >
+                      <div className="p-4 pb-3.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-[0.67rem] font-bold tracking-[0.11em] text-[#8fa5cd] uppercase">{item.subject}</p>
+                            <h4 className="mt-2 text-[0.98rem] leading-snug font-semibold tracking-[-0.02em] text-[#f2f5fa]">{item.title}</h4>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button className="size-7 rounded-lg border border-[#71303e] bg-[#351923] text-[#ff91a5] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] hover:border-[#a34255] hover:bg-[#57222f] hover:text-[#ffc0cb]" variant="destructive" size="icon-sm" type="button" aria-label={'Eliminar ' + item.title} title="Eliminar" onPointerDown={(event) => event.stopPropagation()} onClick={() => onDelete(item)}>
+                              <Trash2 className="size-3.5" aria-hidden="true" />
+                            </Button>
+                            {isDraggable && (
+                              <span className="flex size-8 items-center justify-center rounded-lg text-[#60718c]" title="Arrastrar">
+                                <GripVertical className="size-4" aria-hidden="true" />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Badge className={['h-6 rounded-md px-2.5 text-[0.7rem] font-semibold', typeBadgeClasses[item.type]].join(' ')} variant="outline">{itemTypeLabels[item.type]}</Badge>
+                          {archivedView ? (
+                            <Badge className="h-6 rounded-md border-[#48566b] bg-[#252f3e] px-2.5 text-[0.7rem] font-semibold text-[#b8c2d1]" variant="outline">Archivado</Badge>
+                          ) : (
+                            <Badge className={['h-6 rounded-md px-2.5 text-[0.7rem] font-semibold', statusBadgeClasses[item.status]].join(' ')} variant="outline">{getItemStatusLabel(item)}</Badge>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Button className="size-7 rounded-lg border border-[#71303e] bg-[#351923] text-[#ff91a5] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] hover:border-[#a34255] hover:bg-[#57222f] hover:text-[#ffc0cb]" variant="destructive" size="icon-sm" type="button" aria-label={'Eliminar ' + item.title} title="Eliminar" onPointerDown={(event) => event.stopPropagation()} onClick={() => onDelete(item)}>
-                          <Trash2 className="size-3.5" aria-hidden="true" />
-                        </Button>
-                        {isDraggable && (
-                          <span className="flex size-8 items-center justify-center rounded-lg text-[#60718c]" title="Arrastrar">
-                            <GripVertical className="size-4" aria-hidden="true" />
-                          </span>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#293851] bg-[#101a2a]/80 px-4 py-3">
+                        <div className="grid gap-1">
+                          {item.dueDate && (
+                            <time className="flex items-center gap-1.5 text-[0.7rem] font-semibold text-[#a9baff]" dateTime={item.dueDate}>
+                              <CalendarDays className="size-3.5" aria-hidden="true" />
+                              Vence {formatAcademicDate(item.dueDate)}
+                            </time>
+                          )}
+                          <time className="flex items-center gap-1.5 text-[0.68rem] text-[#8291a8]" dateTime={item.createdAt}>
+                            <Clock3 className="size-3.5" aria-hidden="true" />
+                            Creado {studyItemDateFormatter.format(new Date(item.createdAt))}
+                          </time>
+                        </div>
+                        {onArchive && canArchiveManually(item) && (
+                          <Button className="h-7 gap-1.5 rounded-md border-[#3c4e6d] bg-[#1d2b43] px-2.5 text-[0.7rem] font-semibold text-[#c0cdf0] hover:bg-[#293a58] hover:text-white" variant="outline" size="sm" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onArchive(item.id)}>
+                            <Archive className="size-3.5" aria-hidden="true" />
+                            Archivar
+                          </Button>
+                        )}
+                        {onRestore && (
+                          <Button className="h-7 gap-1.5 rounded-md border-[#3c4e6d] bg-[#1d2b43] px-2.5 text-[0.7rem] font-semibold text-[#c0cdf0] hover:bg-[#293a58] hover:text-white" variant="outline" size="sm" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onRestore(item.id)}>
+                            <RotateCcw className="size-3.5" aria-hidden="true" />
+                            Restaurar
+                          </Button>
                         )}
                       </div>
-                    </div>
+                    </Card>
+                  )
 
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge className={['h-6 rounded-md px-2.5 text-[0.7rem] font-semibold', typeBadgeClasses[item.type]].join(' ')} variant="outline">{itemTypeLabels[item.type]}</Badge>
-                      {archivedView ? (
-                        <Badge className="h-6 rounded-md border-[#48566b] bg-[#252f3e] px-2.5 text-[0.7rem] font-semibold text-[#b8c2d1]" variant="outline">Archivado</Badge>
-                      ) : (
-                        <Badge className={['h-6 rounded-md px-2.5 text-[0.7rem] font-semibold', statusBadgeClasses[item.status]].join(' ')} variant="outline">{getItemStatusLabel(item)}</Badge>
-                      )}
-                    </div>
-                  </div>
+                  return isDraggable ? (
+                    <DraggableStudyItem item={item} key={item.id}>{renderCard}</DraggableStudyItem>
+                  ) : renderCard()
+                })}
+              </div>
+            </section>
+          )
+        }
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#293851] bg-[#101a2a]/80 px-4 py-3">
-                    <div className="grid gap-1">
-                      {item.dueDate && (
-                        <time className="flex items-center gap-1.5 text-[0.7rem] font-semibold text-[#a9baff]" dateTime={item.dueDate}>
-                          <CalendarDays className="size-3.5" aria-hidden="true" />
-                          Vence {formatAcademicDate(item.dueDate)}
-                        </time>
-                      )}
-                      <time className="flex items-center gap-1.5 text-[0.68rem] text-[#8291a8]" dateTime={item.createdAt}>
-                        <Clock3 className="size-3.5" aria-hidden="true" />
-                        Creado {studyItemDateFormatter.format(new Date(item.createdAt))}
-                      </time>
-                    </div>
-                    {onArchive && canArchiveManually(item) && (
-                      <Button className="h-7 gap-1.5 rounded-md border-[#3c4e6d] bg-[#1d2b43] px-2.5 text-[0.7rem] font-semibold text-[#c0cdf0] hover:bg-[#293a58] hover:text-white" variant="outline" size="sm" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onArchive(item.id)}>
-                        <Archive className="size-3.5" aria-hidden="true" />
-                        Archivar
-                      </Button>
-                    )}
-                    {onRestore && (
-                      <Button className="h-7 gap-1.5 rounded-md border-[#3c4e6d] bg-[#1d2b43] px-2.5 text-[0.7rem] font-semibold text-[#c0cdf0] hover:bg-[#293a58] hover:text-white" variant="outline" size="sm" type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => onRestore(item.id)}>
-                        <RotateCcw className="size-3.5" aria-hidden="true" />
-                        Restaurar
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </section>
-        )
+        return isDraggable && column.value !== 'archived' ? (
+          <DroppableStudyItemStatus itemType={itemType} status={column.value} key={column.value}>{renderColumn}</DroppableStudyItemStatus>
+        ) : renderColumn()
       })}
     </div>
   )
-}
 
+  if (!isDraggable || !onStatusChange) return renderBoard(null)
+
+  return (
+    <StudyItemsDndContext
+      items={items}
+      itemType={itemType}
+      allowedStatuses={allowedStatuses}
+      onStatusChange={onStatusChange}
+      renderOverlay={(activeItem) => (
+        <div className="pointer-events-none min-w-[240px] scale-[1.03] rounded-xl border border-[#7891ed] bg-[linear-gradient(145deg,#233453,#16253c)] px-4 py-3.5 text-[#f0f5fc] shadow-[0_24px_60px_rgba(2,6,23,0.58),0_0_0_1px_rgba(132,154,239,0.18)]">
+          <p className="mb-1.5 text-[0.66rem] font-bold tracking-[0.11em] text-[#aebeff] uppercase">{activeItem.subject}</p>
+          <strong className="block text-[0.92rem]">{activeItem.title}</strong>
+          <span className="mt-2 block text-[0.7rem] text-[#899ab5]">Soltá para mover</span>
+        </div>
+      )}
+    >
+      {renderBoard}
+    </StudyItemsDndContext>
+  )
+}
 function ModuleArchive({ title, emptyMessage, items, itemType, isOpen, onToggle, onRestore, onDelete }: { title: string; emptyMessage: string; items: StudyItem[]; itemType: ArchivableItemType; isOpen: boolean; onToggle: () => void; onRestore: (id: string) => void; onDelete: (item: StudyItem) => void }) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (open !== isOpen) onToggle() }}>
@@ -207,7 +241,7 @@ function ModuleArchive({ title, emptyMessage, items, itemType, isOpen, onToggle,
               <strong className="text-[0.82rem] font-semibold text-[#93a1b5]">{emptyMessage}</strong>
             </div>
           ) : (
-            <Board columns={archiveStatuses} items={items} itemType={itemType} draggedItem={null} dropTarget={null} onRestore={onRestore} onDelete={onDelete} isDraggable={false} archivedView />
+            <Board columns={archiveStatuses} items={items} itemType={itemType} onRestore={onRestore} onDelete={onDelete} isDraggable={false} archivedView />
           )}
         </div>
       </DialogContent>
@@ -216,9 +250,14 @@ function ModuleArchive({ title, emptyMessage, items, itemType, isOpen, onToggle,
 }
 function App() {
   const [authSession, setAuthSession] = useState<AuthSession | null>(null)
-  const [items, setItems] = useState<StudyItem[]>([])
+  const items = useStudyItemsStore((state) => state.items)
+  const error = useStudyItemsStore((state) => state.error)
+  const loadItems = useStudyItemsStore((state) => state.loadItems)
+  const createStoredItem = useStudyItemsStore((state) => state.createItem)
+  const updateStoredItem = useStudyItemsStore((state) => state.updateItem)
+  const deleteStoredItem = useStudyItemsStore((state) => state.deleteItem)
+  const resetStudyItems = useStudyItemsStore((state) => state.reset)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [authMessage, setAuthMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [isRegistering, setIsRegistering] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -228,16 +267,12 @@ function App() {
   const [openArchives, setOpenArchives] = useState<Record<ArchivableItemType, boolean>>({ task: false, 'practical-work': false, material: false })
   const [itemToDelete, setItemToDelete] = useState<StudyItem | null>(null)
   const [showSettings, setShowSettings] = useState(false)
-  const [draggedItem, setDraggedItem] = useState<StudyItem | null>(null)
-  const [dropTarget, setDropTarget] = useState<ItemStatus | null>(null)
-  const dragPositionRef = useRef({ x: 0, y: 0 })
-  const dragOverlayRef = useRef<HTMLDivElement>(null)
 
-  const handleApiError = (apiError: unknown, fallbackMessage: string) => { if (apiError instanceof ApiError && apiError.status === 401) { logout(); return }; setError(apiError instanceof ApiError ? apiError.message : fallbackMessage) }
-  const loadItems = async (token: string) => { try { const loadedItems = await getStudyItems(token); setItems(loadedItems) } catch (apiError) { handleApiError(apiError, 'No se pudieron cargar tus elementos.') } }
-  useEffect(() => { const restoredSession = restoreAuthSession(); setAuthSession(restoredSession); setLoading(false); if (restoredSession) void loadItems(restoredSession.token) }, [])
+
+  const handleStudyItemsError = (apiError: unknown) => { if (apiError instanceof ApiError && apiError.status === 401) logout() }
+  useEffect(() => { const restoredSession = restoreAuthSession(); setAuthSession(restoredSession); setLoading(false); if (restoredSession) void loadItems(restoredSession.token).catch(handleStudyItemsError) }, [])
   useEffect(() => { if (!authSession) return; const remainingLifetime = Date.parse(authSession.expiresAt) - Date.now(); if (remainingLifetime <= 0) { logout(); return }; const timeout = window.setTimeout(logout, Math.min(remainingLifetime, 2147483647)); return () => window.clearTimeout(timeout) }, [authSession])
-  useLayoutEffect(() => { if (draggedItem && dragOverlayRef.current) { dragOverlayRef.current.style.left = `${dragPositionRef.current.x}px`; dragOverlayRef.current.style.top = `${dragPositionRef.current.y}px` } }, [draggedItem, dropTarget])
+
 
   const isArchived = (item: StudyItem) => item.isArchived || item.archivedManually
   const taskItems = items.filter((item) => item.type === 'task')
@@ -263,7 +298,7 @@ function App() {
     if (!current) return
 
     try {
-      await updateStudyItem(id, {
+      await updateStoredItem(id, {
         type: current.type,
         title: current.title,
         subject: current.subject,
@@ -273,9 +308,8 @@ function App() {
         examInstance: current.examInstance,
         isArchived: changes.isArchived ?? current.isArchived,
       }, authSession.token)
-      await loadItems(authSession.token)
     } catch (apiError) {
-      handleApiError(apiError, 'No se pudo guardar el cambio. Intentá otra vez.')
+      handleStudyItemsError(apiError)
     }
   }
 
@@ -287,7 +321,7 @@ function App() {
   const restoreItem = async (id: string) => updateRemote(id, { isArchived: false })
   const toggleArchive = (type: ArchivableItemType) => setOpenArchives((current) => ({ ...current, [type]: !current[type] }))
 
-  const deleteItem = async () => { if (!itemToDelete || !authSession) return; try { await deleteStudyItem(itemToDelete.id, authSession.token); setItems((current) => current.filter((item) => item.id !== itemToDelete.id)); setItemToDelete(null) } catch (apiError) { handleApiError(apiError, 'No se pudo eliminar el elemento.') } }
+  const deleteItem = async () => { if (!itemToDelete || !authSession) return; try { await deleteStoredItem(itemToDelete.id, authSession.token); setItemToDelete(null) } catch (apiError) { handleStudyItemsError(apiError) } }
 
   function changeItemType(type: ItemType) {
     setItemType(type)
@@ -309,7 +343,7 @@ function App() {
     if (!subject || (!isExam && !title) || (isExam && !dueDateValue)) return
 
     try {
-      await createStudyItem({
+      await createStoredItem({
         type: itemType,
         title: isExam ? null : title,
         subject,
@@ -319,19 +353,14 @@ function App() {
         examInstance: isExam ? examInstanceValue || null : null,
       }, authSession.token)
       setIsFormOpen(false)
-      await loadItems(authSession.token)
     } catch (apiError) {
-      handleApiError(apiError, 'No se pudo crear el elemento.')
+      handleStudyItemsError(apiError)
     }
   }
 
-  async function submitAuth(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); const email = String(form.get('email') ?? '').trim(); const password = String(form.get('password') ?? ''); setAuthMessage(null); try { if (isRegistering) { const response = await register({ email, password }); setAuthMessage({ text: response.message, type: 'success' }); return } const response = await login({ email, password }); const nextSession = persistAuthSession(response, email); setAuthSession(nextSession); void loadItems(nextSession.token) } catch (authError) { const message = authError instanceof ApiError || authError instanceof Error ? authError.message : 'No se pudo completar la autenticación.'; setAuthMessage({ text: message, type: 'error' }) } }
-  function logout() { clearAuthSession(); setAuthSession(null); setItems([]); setError(''); setShowSettings(false); setIsFormOpen(false); setItemToDelete(null); setDraggedItem(null); setDropTarget(null) }
-  const updatePreview = (x: number, y: number) => { dragPositionRef.current = { x, y }; if (dragOverlayRef.current) { dragOverlayRef.current.style.left = `${x}px`; dragOverlayRef.current.style.top = `${y}px` } }
-  const findDropTarget = (x: number, y: number, type: ItemType) => { const target = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-drop-status]'); return target?.dataset.dropType === type ? target.dataset.dropStatus as ItemStatus : null }
-  function startPointerDrag(event: PointerEvent<HTMLElement>, item: StudyItem) { if ((event.target as HTMLElement).closest('button')) return; event.currentTarget.setPointerCapture(event.pointerId); updatePreview(event.clientX, event.clientY); setDraggedItem(item); setDropTarget(findDropTarget(event.clientX, event.clientY, item.type)) }
-  function movePointerDrag(event: PointerEvent<HTMLElement>) { if (!draggedItem) return; updatePreview(event.clientX, event.clientY); const target = findDropTarget(event.clientX, event.clientY, draggedItem.type); setDropTarget((current) => current === target ? current : target) }
-  function endPointerDrag(event: PointerEvent<HTMLElement>) { if (draggedItem) { const target = findDropTarget(event.clientX, event.clientY, draggedItem.type); if (target) void updateStatus(draggedItem.id, target) } setDraggedItem(null); setDropTarget(null) }
+  async function submitAuth(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); const email = String(form.get('email') ?? '').trim(); const password = String(form.get('password') ?? ''); setAuthMessage(null); try { if (isRegistering) { const response = await register({ email, password }); setAuthMessage({ text: response.message, type: 'success' }); return } const response = await login({ email, password }); const nextSession = persistAuthSession(response, email); setAuthSession(nextSession); void loadItems(nextSession.token).catch(handleStudyItemsError) } catch (authError) { const message = authError instanceof ApiError || authError instanceof Error ? authError.message : 'No se pudo completar la autenticación.'; setAuthMessage({ text: message, type: 'error' }) } }
+  function logout() { clearAuthSession(); setAuthSession(null); resetStudyItems(); setShowSettings(false); setIsFormOpen(false); setItemToDelete(null) }
+
 
   if (loading) return <main className="flex min-h-screen items-center justify-center p-6"><p>Cargando StudyFlow…</p></main>
   if (!authSession) return (
@@ -579,7 +608,7 @@ function App() {
               </Button>
             </div>
           </div>
-          <Board columns={taskStatuses} items={tasks} itemType="task" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+          <Board columns={taskStatuses} items={tasks} itemType="task" onStatusChange={updateStatus} onArchive={archiveItem} onDelete={setItemToDelete} />
           <ModuleArchive title="Archivo de tareas" emptyMessage="Todavía no hay tareas archivadas" items={archivedTasks} itemType="task" isOpen={openArchives.task} onToggle={() => toggleArchive('task')} onRestore={restoreItem} onDelete={setItemToDelete} />
         </section>
 
@@ -603,7 +632,7 @@ function App() {
               </Button>
             </div>
           </div>
-          <Board columns={practicalWorkStatuses} items={practicalWorks} itemType="practical-work" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+          <Board columns={practicalWorkStatuses} items={practicalWorks} itemType="practical-work" onStatusChange={updateStatus} onArchive={archiveItem} onDelete={setItemToDelete} />
           <ModuleArchive title="Archivo de trabajos prácticos" emptyMessage="Todavía no hay trabajos prácticos archivados" items={archivedPracticalWorks} itemType="practical-work" isOpen={openArchives['practical-work']} onToggle={() => toggleArchive('practical-work')} onRestore={restoreItem} onDelete={setItemToDelete} />
         </section>
 
@@ -627,19 +656,12 @@ function App() {
             </Button>
           </div>
         </div>
-        <Board columns={materialStatuses} items={activeMaterials} itemType="material" draggedItem={draggedItem} dropTarget={dropTarget} onPointerDown={startPointerDrag} onPointerMove={movePointerDrag} onPointerUp={endPointerDrag} onArchive={archiveItem} onDelete={setItemToDelete} />
+        <Board columns={materialStatuses} items={activeMaterials} itemType="material" onStatusChange={updateStatus} onArchive={archiveItem} onDelete={setItemToDelete} />
         <ModuleArchive title="Archivo de materiales" emptyMessage="Todavía no hay materiales archivados" items={archivedMaterials} itemType="material" isOpen={openArchives.material} onToggle={() => toggleArchive('material')} onRestore={restoreItem} onDelete={setItemToDelete} />
         </section>
       </div>
 
-      {draggedItem && createPortal(
-        <div className="pointer-events-none fixed z-30 min-w-[240px] -translate-x-1/2 -translate-y-1/2 scale-[1.03] rounded-xl border border-[#7891ed] bg-[linear-gradient(145deg,#233453,#16253c)] px-4 py-3.5 text-[#f0f5fc] shadow-[0_24px_60px_rgba(2,6,23,0.58),0_0_0_1px_rgba(132,154,239,0.18)]" ref={dragOverlayRef}>
-          <p className="mb-1.5 text-[0.66rem] font-bold tracking-[0.11em] text-[#aebeff] uppercase">{draggedItem.subject}</p>
-          <strong className="block text-[0.92rem]">{draggedItem.title}</strong>
-          <span className="mt-2 block text-[0.7rem] text-[#899ab5]">Soltá para mover</span>
-        </div>,
-        document.body,
-      )}
+
       {deleteDialog}
       {studyItemDialog}
     </main>
