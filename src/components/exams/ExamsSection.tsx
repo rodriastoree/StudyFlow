@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CalendarDays, Eye, GraduationCap, Trash2 } from 'lucide-react'
+import { AnimatedList, AnimatedListItem, AnimatedSection } from '@/components/motion/MotionPrimitives'
 import { AcademicItemDetailDialog, eventStyles, formatAcademicDate, getEventKind, getEventLabel } from '@/components/calendar/CalendarSection'
 import type { CalendarStudyItem } from '@/components/calendar/CalendarSection'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +25,7 @@ export function ExamsSection({ items, onDelete }: { items: StudyItem[]; onDelete
 
   return (
     <>
-      <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-[26px] border border-[#3a304d] bg-[radial-gradient(circle_at_top_right,rgba(104,72,145,0.14),transparent_34%),linear-gradient(145deg,#151927,#0d1421)] shadow-[0_22px_60px_rgba(2,6,23,0.24)] xl:h-[500px]">
+      <AnimatedSection className="flex h-full min-h-0 flex-col overflow-hidden rounded-[26px] border border-[#3a304d] bg-[radial-gradient(circle_at_top_right,rgba(104,72,145,0.14),transparent_34%),linear-gradient(145deg,#151927,#0d1421)] shadow-[0_22px_60px_rgba(2,6,23,0.24)] xl:h-[500px]">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#322b45] bg-[#1a1d30]/82 p-4">
           <div className="flex items-start gap-3.5">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#614c82] bg-[#302443] text-[#d1afff] shadow-[0_9px_24px_rgba(66,39,104,0.25)]">
@@ -50,11 +51,13 @@ export function ExamsSection({ items, onDelete }: { items: StudyItem[]; onDelete
             </div>
           ) : (
             <div className="grid gap-3 2xl:grid-cols-2">
+              <AnimatedList>
               {exams.map((exam) => {
                 const kind = getEventKind(exam)
 
                 return (
-                  <Card className="gap-0 overflow-hidden rounded-2xl border border-[#332c47] bg-[linear-gradient(145deg,#1a2030,#121825)] p-0 py-0 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.25)] transition-colors hover:border-[#4a3c62]" key={exam.id}>
+                  <AnimatedListItem className="min-w-0" key={exam.id}>
+                    <Card className="gap-0 overflow-hidden rounded-2xl border border-[#332c47] bg-[linear-gradient(145deg,#1a2030,#121825)] p-0 py-0 text-[#edf2fa] ring-0 shadow-[0_14px_34px_rgba(2,6,23,0.25)] transition-colors hover:border-[#4a3c62]" key={exam.id}>
                     <div className="p-4 pb-3.5">
                       <div className="flex flex-wrap items-start justify-between gap-2.5">
                         <Badge className={['h-6 rounded-md px-2.5 text-[0.68rem] font-semibold', eventStyles[kind]].join(' ')} variant="outline">{getEventLabel(exam)}</Badge>
@@ -77,13 +80,15 @@ export function ExamsSection({ items, onDelete }: { items: StudyItem[]; onDelete
                         <Trash2 className="size-3.5" aria-hidden="true" />
                       </Button>
                     </div>
-                  </Card>
+                    </Card>
+                  </AnimatedListItem>
                 )
               })}
+              </AnimatedList>
             </div>
           )}
         </div>
-      </section>
+      </AnimatedSection>
 
       <AcademicItemDetailDialog item={selectedExam} onClose={() => setSelectedExam(null)} />
     </>

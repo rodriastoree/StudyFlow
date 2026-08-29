@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { AnimatedList, AnimatedListItem, AnimatedSection } from '@/components/motion/MotionPrimitives'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -148,7 +149,7 @@ export function CalendarSection({ items }: { items: StudyItem[] }) {
 
   return (
     <>
-      <section className="flex h-full flex-col overflow-hidden rounded-[26px] border border-[#253750] bg-[linear-gradient(145deg,#101b2d,#0c1523)] shadow-[0_22px_60px_rgba(2,6,23,0.24)] xl:h-[500px]">
+      <AnimatedSection className="flex h-full flex-col overflow-hidden rounded-[26px] border border-[#253750] bg-[linear-gradient(145deg,#101b2d,#0c1523)] shadow-[0_22px_60px_rgba(2,6,23,0.24)] xl:h-[500px]">
         <div className="flex flex-col gap-3 border-b border-[#26384f] bg-[#132037]/82 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3.5">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#405b8d] bg-[#1c3153] text-[#9bb8ff] shadow-[0_9px_24px_rgba(24,49,102,0.28)]">
@@ -200,15 +201,19 @@ export function CalendarSection({ items }: { items: StudyItem[] }) {
                     </div>
 
                     <div className="grid gap-1">
+                      <AnimatedList>
                       {visibleEvents.map((item) => {
                         const kind = getEventKind(item)
                         return (
-                          <Button className={['h-6 w-full min-w-0 flex-row items-center justify-start gap-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-left shadow-none', eventStyles[kind]].join(' ')} variant="ghost" type="button" key={item.id} title={`${getEventLabel(item)}: ${item.title}`} onClick={() => setSelectedItem(item)}>
+                          <AnimatedListItem className="min-w-0" key={item.id}>
+                            <Button className={['h-6 w-full min-w-0 flex-row items-center justify-start gap-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-left shadow-none', eventStyles[kind]].join(' ')} variant="ghost" type="button" key={item.id} title={`${getEventLabel(item)}: ${item.title}`} onClick={() => setSelectedItem(item)}>
                             <span className="shrink-0 text-[0.5rem] font-extrabold tracking-[0.04em] uppercase opacity-80">{getEventLabel(item)}</span>
                             <span className="min-w-0 flex-1 truncate text-[0.6rem] font-semibold">{item.type === 'exam' ? item.subject : item.title}</span>
-                          </Button>
+                            </Button>
+                          </AnimatedListItem>
                         )
                       })}
+                      </AnimatedList>
                     </div>
                   </div>
                 )
@@ -216,7 +221,7 @@ export function CalendarSection({ items }: { items: StudyItem[] }) {
             </div>
           </div>
         </div>
-      </section>
+      </AnimatedSection>
 
       <AcademicItemDetailDialog item={selectedItem} onClose={() => setSelectedItem(null)} />
     </>

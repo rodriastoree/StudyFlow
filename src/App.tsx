@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { CalendarSection } from '@/components/calendar/CalendarSection'
 import { ExamsSection } from '@/components/exams/ExamsSection'
+import { AnimatedList, AnimatedListItem } from '@/components/motion/MotionPrimitives'
 import { DraggableStudyItem, DroppableStudyItemStatus, StudyItemsDndContext } from '@/components/study-items/StudyItemsDnd'
 import type { DraggableStudyItemRenderState, DroppableStudyItemRenderState } from '@/components/study-items/StudyItemsDnd'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -105,17 +106,21 @@ function Board({ columns, items, itemType, onStatusChange, onArchive, onRestore,
               </div>
 
               <div className="mt-3 grid min-h-[198px] content-start gap-3 rounded-xl border border-dashed border-[#273750] bg-[#0b1423]/55 p-2.5">
+                <AnimatedList>
                 {columnItems.length === 0 ? (
-                  <div className={['flex min-h-[160px] flex-col items-center justify-center rounded-lg border px-5 text-center transition-colors', isDropTarget ? 'border-[#6580ee]/70 bg-[#1b2a50]/80 text-[#d2dcff]' : 'border-transparent text-[#71809a]'].join(' ')}>
+                  <AnimatedListItem interactive={false} key={itemType + ':' + column.value + ':empty'}>
+                    <div className={['flex min-h-[160px] flex-col items-center justify-center rounded-lg border px-5 text-center transition-colors', isDropTarget ? 'border-[#6580ee]/70 bg-[#1b2a50]/80 text-[#d2dcff]' : 'border-transparent text-[#71809a]'].join(' ')}>
                     <span className="mb-3 flex size-10 items-center justify-center rounded-xl border border-[#2d3e59] bg-[#162238]">
                       <Inbox className="size-4.5" aria-hidden="true" />
                     </span>
                     <strong className="text-[0.82rem] font-semibold">{isDropTarget ? 'Soltá el elemento aquí' : isDraggable ? 'Sin elementos' : 'Sin elementos archivados'}</strong>
                     <span className="mt-1 text-[0.72rem] text-[#687790]">{isDropTarget ? 'Se guardará en esta columna.' : isDraggable ? 'Arrastrá una tarjeta para moverla.' : 'No hay elementos archivados en este estado.'}</span>
-                  </div>
+                    </div>
+                  </AnimatedListItem>
                 ) : columnItems.map((item) => {
                   const renderCard = (dragState?: DraggableStudyItemRenderState) => (
-                    <Card
+                    <AnimatedListItem className="min-w-0" isDragging={dragState?.isDragging || activeItem?.id === item.id} key={item.id}>
+                      <Card
                       ref={dragState?.setNodeRef}
                       {...dragState?.attributes}
                       {...dragState?.listeners}
@@ -124,7 +129,7 @@ function Board({ columns, items, itemType, onStatusChange, onArchive, onRestore,
                         isDraggable ? 'touch-none cursor-grab active:cursor-grabbing' : '',
                         dragState?.isDragging || activeItem?.id === item.id
                           ? 'scale-[0.97] cursor-grabbing border-[#7187d9] opacity-35'
-                          : 'hover:-translate-y-0.5 hover:border-[#435b7c] hover:shadow-[0_16px_36px_rgba(2,6,23,0.38)]',
+                          : 'hover:border-[#435b7c] hover:shadow-[0_16px_36px_rgba(2,6,23,0.38)]',
                       ].join(' ')}
                       key={item.id}
                     >
@@ -182,13 +187,15 @@ function Board({ columns, items, itemType, onStatusChange, onArchive, onRestore,
                           </Button>
                         )}
                       </div>
-                    </Card>
+                      </Card>
+                    </AnimatedListItem>
                   )
 
                   return isDraggable ? (
                     <DraggableStudyItem item={item} key={item.id}>{renderCard}</DraggableStudyItem>
                   ) : renderCard()
                 })}
+                </AnimatedList>
               </div>
             </section>
           )
