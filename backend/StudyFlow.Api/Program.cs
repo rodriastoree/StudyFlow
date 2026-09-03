@@ -10,17 +10,24 @@ using StudyFlow.Api.Services;
 using StudyFlow.Api.Services.Automation;
 
 var builder = WebApplication.CreateBuilder(args);
-const string frontendDevelopmentCors = "FrontendDevelopment";
+const string frontendCors = "Frontend";
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()
+    ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? [];
 
 // Add services to the container.
 
 builder.Services.AddControllers();
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(frontendDevelopmentCors, policy =>
+    options.AddPolicy(frontendCors, policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -108,14 +115,10 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.UseCors(frontendDevelopmentCors);
 }
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
-
+// Production TLS is terminated by the deployment reverse proxy.
+app.UseCors(frontendCors);
 app.UseAuthentication();
 app.UseAuthorization();
 
