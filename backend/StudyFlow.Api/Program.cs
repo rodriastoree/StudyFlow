@@ -8,6 +8,7 @@ using StudyFlow.Api.Models;
 using StudyFlow.Api.Options;
 using StudyFlow.Api.Services;
 using StudyFlow.Api.Services.Automation;
+using StudyFlow.Api.Services.Email;
 
 var builder = WebApplication.CreateBuilder(args);
 const string frontendCors = "Frontend";
@@ -64,6 +65,15 @@ if (string.IsNullOrWhiteSpace(jwtOptions.Key)
 
 builder.Services.Configure<JwtOptions>(jwtSection);
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+builder.Services.Configure<ResendOptions>(
+    builder.Configuration.GetSection(ResendOptions.SectionName));
+builder.Services.Configure<StudyFlowAppOptions>(
+    builder.Configuration.GetSection(StudyFlowAppOptions.SectionName));
+builder.Services.AddHttpClient<IEmailService, ResendEmailService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.resend.com/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
 var automationSection = builder.Configuration.GetRequiredSection(
     StudyItemAutomationOptions.SectionName);
 builder.Services
