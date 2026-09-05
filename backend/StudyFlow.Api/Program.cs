@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -11,6 +12,16 @@ using StudyFlow.Api.Services.Automation;
 using StudyFlow.Api.Services.Email;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (builder.Environment.IsProduction()
+    && !string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    builder.Services
+        .AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath.Trim()));
+}
+
 const string frontendCors = "Frontend";
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
